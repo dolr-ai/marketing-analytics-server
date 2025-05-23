@@ -13,6 +13,12 @@ FROM rust:${RUST_VERSION}-slim-bullseye AS build
 ARG APP_NAME
 WORKDIR /app
 
+RUN apt-get update && apt-get install -y \
+  pkg-config \
+  libssl-dev \
+  build-essential \
+  && rm -rf /var/lib/apt/lists/*
+
 # Build the application.
 # Leverage a cache mount to /usr/local/cargo/registry/
 # for downloaded dependencies and a cache mount to /app/target/ for 
