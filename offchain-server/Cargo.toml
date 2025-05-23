@@ -16,3 +16,5 @@ thiserror = "2.0.12"
 axum = "0.8.1"
 tokio = { version = "1.38.0", features = ["rt-multi-thread"] }
 mixpanel_rs = { path = "../mixpanel-rs", features = ["tracing"] }
+ic-agent = { version = "0.38.2", features = ["wasm-bindgen"]}
+candid = "0.10.3"
