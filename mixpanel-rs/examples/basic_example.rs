@@ -23,11 +23,17 @@ async fn main() {
 
     let distinct_id = "cp7dg-n36pb-3bcja-caqkm-vcanj-t37c7-p7ptb-h3tls-6srot-2jz7m-6ae";
 
-    let _ =  mixpanel.people.set(distinct_id , json!({
-        "$email" : "user@email.com", 
-        "$device_id": &device_id_1,
-        "$user_id": distinct_id,
-    })).await;
+    let _ = mixpanel
+        .people
+        .set(
+            distinct_id,
+            json!({
+                "$email" : "user@email.com",
+                "$device_id": &device_id_1,
+                "$user_id": distinct_id,
+            }),
+        )
+        .await;
 
     let _ = mixpanel
         .track(
