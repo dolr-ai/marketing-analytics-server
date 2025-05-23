@@ -4,7 +4,7 @@ version = "0.1.0"
 edition = "2024"
 
 [dependencies]
-dotenvy = "0.15.7"
+dotenv = "0.15.0"
 serde = { version = "1.0", features = ["derive"] }
 serde_json = "1.0"
 tower-http = { version = "0.5.2", features = ["trace", "cors"] }
@@ -18,3 +18,4 @@ tokio = { version = "1.38.0", features = ["rt-multi-thread"] }
 mixpanel_rs = { path = "../mixpanel-rs", features = ["tracing"] }
 ic-agent = { version = "0.38.2", features = ["wasm-bindgen"]}
 candid = "0.10.3"
+reqwest.workspace = true

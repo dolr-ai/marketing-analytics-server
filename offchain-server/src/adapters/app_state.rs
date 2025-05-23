@@ -1,0 +1,13 @@
+use std::sync::Arc;
+
+use crate::{
+    application::services, config::Config,
+    infrastructure::repository::mixpanel_repository::MixpanelRepository,
+};
+
+#[derive(Clone)]
+pub struct AppState {
+    pub config: Config,
+    pub analytics_service:
+        Arc<services::mixpanel_analytics_service::MixpanelService<MixpanelRepository>>,
+}
