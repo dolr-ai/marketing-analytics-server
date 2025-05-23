@@ -1,0 +1,14 @@
+services:
+  server:
+    build:
+      context: .
+      target: final
+    ports:
+      - 3000:3000
+    networks: 
+      - common-net
+
+networks:
+  common-net: {}
+
+  

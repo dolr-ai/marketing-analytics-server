@@ -3,6 +3,10 @@ name = "offchain-server"
 version = "0.1.0"
 edition = "2024"
 
+[[bin]]
+name = "marketing-analytics-server"
+path = "src/main.rs"
+
 [dependencies]
 dotenv = "0.15.0"
 serde = { version = "1.0", features = ["derive"] }
