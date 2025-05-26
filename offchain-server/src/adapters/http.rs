@@ -77,6 +77,7 @@ impl HttpServer {
 fn api_routes() -> Router<AppState> {
     Router::new()
         .route("/btc_balance/{principal}", get(fetch_btc_balance))
+        .route("/sats_balance/{principal}", get(fetch_sats_balance))
         .route("/send_event", post(send_event_to_mixpanel))
 }
 
@@ -95,8 +96,15 @@ async fn fetch_btc_balance(Path(principal): Path<Principal>) -> Result<Json<Bala
     }
 }
 
+async fn fetch_sats_balance(Path(principal): Path<Principal>) -> Result<Json<Balance>, AppError> {
+    match crate::utils::sats_balance_of(principal).await {
+        Ok(balance) => Ok(Json(Balance { balance })),
+        Err(e) => Err(e),
+    }
+}
+
 async fn send_event_to_mixpanel(
-    _:  AuthenticatedRequest,
+    _: AuthenticatedRequest,
     State(state): State<AppState>,
     Json(payload): Json<Value>,
 ) -> Result<(), AppError> {
@@ -111,6 +119,12 @@ async fn send_event_to_mixpanel(
     match crate::utils::btc_balance_of(principal).await {
         Ok(bal) => {
             payload["btc_balance"] = (bal as f64 / 100_000_000.0).into();
+        }
+        Err(_) => {}
+    }
+    match crate::utils::sats_balance_of(principal).await {
+        Ok(bal) => {
+            payload["sats_balance"] = (bal).into();
         }
         Err(_) => {}
     }

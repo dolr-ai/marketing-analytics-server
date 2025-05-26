@@ -1,6 +1,6 @@
 use axum::{
     extract::{FromRef, FromRequestParts, State},
-    http::{request::Parts, StatusCode},
+    http::{StatusCode, request::Parts},
 };
 
 use super::app_state::AppState;
@@ -15,8 +15,9 @@ where
     type Rejection = (StatusCode, &'static str);
 
     async fn from_request_parts(parts: &mut Parts, state: &S) -> Result<Self, Self::Rejection> {
-
-        let State(state): State<AppState> = State::from_request_parts(parts, state).await.map_err(|_| (StatusCode::INTERNAL_SERVER_ERROR, "Unauthorized"))?;
+        let State(state): State<AppState> = State::from_request_parts(parts, state)
+            .await
+            .map_err(|_| (StatusCode::INTERNAL_SERVER_ERROR, "Unauthorized"))?;
 
         let expected_token = state.config.server_access_token;
 
