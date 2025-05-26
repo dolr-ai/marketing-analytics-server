@@ -118,7 +118,7 @@ async fn send_event_to_mixpanel(
         .unwrap_or("unknown".into());
     match crate::utils::btc_balance_of(principal).await {
         Ok(bal) => {
-            payload["btc_balance"] = (bal as f64 / 100_000_000.0).into();
+            payload["btc_balance_e8s"] = (bal as f64).into();
         }
         Err(_) => {}
     }
