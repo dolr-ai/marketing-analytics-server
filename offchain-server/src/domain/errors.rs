@@ -1,7 +1,7 @@
 use std::num::ParseIntError;
 
 use axum::{http::StatusCode, response::IntoResponse};
-use ic_agent::{AgentError, export::PrincipalError};
+use ic_agent::{export::PrincipalError, AgentError};
 use mixpanel_rs::errors::MixpanelError;
 use thiserror::Error;
 

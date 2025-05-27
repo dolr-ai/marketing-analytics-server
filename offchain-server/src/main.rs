@@ -31,14 +31,17 @@ async fn main() -> anyhow::Result<()> {
         mixpanel_repository,
     );
 
-    let http_server = adapters::http::HttpServer::new(config, env_config, analytics_service, bigquery_client)
-        .await
-        .expect("Failed to create HTTP server");
+    let http_server =
+        adapters::http::HttpServer::new(config, env_config, analytics_service, bigquery_client)
+            .await
+            .expect("Failed to create HTTP server");
     http_server.run().await
 }
 
-
 pub async fn init_bigquery_client() -> Client {
-    let (config, _) = ClientConfig::new_with_auth().await.map_err(|f| format!("Failed to create BigQuery client: {}", f)).unwrap();
+    let (config, _) = ClientConfig::new_with_auth()
+        .await
+        .map_err(|f| format!("Failed to create BigQuery client: {}", f))
+        .unwrap();
     Client::new(config).await.unwrap()
 }

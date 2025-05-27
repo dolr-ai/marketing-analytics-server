@@ -1,6 +1,6 @@
 use axum::{
     extract::{FromRef, FromRequestParts, State},
-    http::{StatusCode, request::Parts},
+    http::{request::Parts, StatusCode},
 };
 
 use super::app_state::AppState;
