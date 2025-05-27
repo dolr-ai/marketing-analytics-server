@@ -112,7 +112,6 @@ struct BigQueryEvent {
     event: String, 
     params: String,
 }
-
 async fn send_event_to_mixpanel(
     _: AuthenticatedRequest,
     State(state): State<AppState>,
@@ -129,6 +128,12 @@ async fn send_event_to_mixpanel(
     match crate::utils::btc_balance_of(principal).await {
         Ok(bal) => {
             payload["btc_balance_e8s"] = (bal as f64).into();
+        }
+        Err(_) => {}
+    }
+    match crate::utils::sats_balance_of(principal).await {
+        Ok(bal) => {
+            payload["sats_balance"] = (bal).into();
         }
         Err(_) => {}
     }
