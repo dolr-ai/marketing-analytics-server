@@ -10,4 +10,5 @@ pub struct AppState {
     pub config: Config,
     pub analytics_service:
         Arc<services::mixpanel_analytics_service::MixpanelService<MixpanelRepository>>,
+    pub bigquery_client: google_cloud_bigquery::client::Client,
 }

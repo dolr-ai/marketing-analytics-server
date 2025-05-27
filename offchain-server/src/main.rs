@@ -3,6 +3,8 @@ use infrastructure::repository::mixpanel_repository::MixpanelRepository;
 pub mod adapters;
 pub mod application;
 pub mod config;
+use google_cloud_bigquery::client::{Client, ClientConfig};
+pub mod app_config;
 pub mod consts;
 pub mod domain;
 pub mod infrastructure;
@@ -15,6 +17,10 @@ async fn main() -> anyhow::Result<()> {
         .init();
     let env_config = crate::config::Config::from_env()?;
 
+    let _ = crate::app_config::AppConfig::load();
+
+    let bigquery_client: Client = init_bigquery_client().await;
+
     let config = adapters::http::HttpServerConfig {
         port: &env_config.server_port.clone(),
     };
@@ -25,8 +31,14 @@ async fn main() -> anyhow::Result<()> {
         mixpanel_repository,
     );
 
-    let http_server = adapters::http::HttpServer::new(config, env_config, analytics_service)
+    let http_server = adapters::http::HttpServer::new(config, env_config, analytics_service, bigquery_client)
         .await
         .expect("Failed to create HTTP server");
     http_server.run().await
+}
+
+
+pub async fn init_bigquery_client() -> Client {
+    let (config, _) = ClientConfig::new_with_auth().await.map_err(|f| format!("Failed to create BigQuery client: {}", f)).unwrap();
+    Client::new(config).await.unwrap()
 }

@@ -1,2 +1,3 @@
 /target
 .env
+google_service_account.json
