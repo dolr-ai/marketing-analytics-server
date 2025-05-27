@@ -1,11 +1,8 @@
-use std::{
-    env,
-    fs::OpenOptions,
-    io::BufWriter,
-};
-use serde::Deserialize;
+use base64::decode;
 use config::{Config, ConfigError, Environment, File};
+use serde::Deserialize;
 use serde_json::Value;
+use std::{env, fs::OpenOptions, io::BufWriter};
 
 #[derive(Deserialize, Clone)]
 pub struct AppConfig {
@@ -14,11 +11,14 @@ pub struct AppConfig {
 
 impl AppConfig {
     pub fn load() -> Result<Self, ConfigError> {
-        let sa_key_raw = env::var("GOOGLE_SA_KEY").expect("GOOGLE_SA_KEY is missing");
+        let encoded_sa_key = env::var("GOOGLE_SA_KEY").expect("GOOGLE_SA_KEY is missing");
 
-        // Validate and parse JSON (avoids trailing character issues)
-        let parsed_json: Value = serde_json::from_str(&sa_key_raw)
-            .expect("GOOGLE_SA_KEY is not valid JSON");
+        let decoded_sa_key =
+            String::from_utf8(decode(&encoded_sa_key).expect("Failed to decode base64"))
+                .expect("Decoded base64 is not valid UTF-8");
+
+        let parsed_json: Value =
+            serde_json::from_str(&decoded_sa_key).expect("GOOGLE_SA_KEY is not valid JSON");
 
         // Write the validated, pretty-printed JSON to file
         let file = OpenOptions::new()
@@ -29,10 +29,12 @@ impl AppConfig {
             .expect("failed to create json file");
 
         let mut writer = BufWriter::new(file);
-        serde_json::to_writer_pretty(&mut writer, &parsed_json)
-            .expect("failed to write json");
+        serde_json::to_writer_pretty(&mut writer, &parsed_json).expect("failed to write json");
 
-        env::set_var("GOOGLE_APPLICATION_CREDENTIALS", "google_service_account.json");
+        env::set_var(
+            "GOOGLE_APPLICATION_CREDENTIALS",
+            "google_service_account.json",
+        );
 
         let conf = Config::builder()
             .add_source(File::with_name("config.toml").required(false))
