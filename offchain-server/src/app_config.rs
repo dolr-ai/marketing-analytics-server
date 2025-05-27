@@ -25,7 +25,7 @@ impl AppConfig {
             .write(true)
             .create(true)
             .truncate(true)
-            .open("google_service_account.json")
+            .open("/tmp/google_service_account.json")
             .expect("failed to create json file");
 
         let mut writer = BufWriter::new(file);
@@ -33,7 +33,7 @@ impl AppConfig {
 
         env::set_var(
             "GOOGLE_APPLICATION_CREDENTIALS",
-            "google_service_account.json",
+            "/tmp/google_service_account.json",
         );
 
         let conf = Config::builder()

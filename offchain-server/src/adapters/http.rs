@@ -2,10 +2,10 @@ use std::{net::SocketAddr, sync::Arc};
 
 use anyhow::Context;
 use axum::{
-    Json, Router,
     extract::{Path, State},
     http::StatusCode,
     routing::*,
+    Json, Router,
 };
 use candid::Principal;
 use google_cloud_bigquery::http::tabledata::insert_all::{InsertAllRequest, Row};
@@ -109,7 +109,7 @@ async fn fetch_sats_balance(Path(principal): Path<Principal>) -> Result<Json<Bal
 
 #[derive(Serialize)]
 struct BigQueryEvent {
-    event: String, 
+    event: String,
     params: String,
 }
 async fn send_event_to_mixpanel(
@@ -147,16 +147,17 @@ async fn send_event_to_mixpanel(
     let payload = serde_json::to_string(&payload).unwrap();
     let row = Row {
         insert_id: None,
-        json: BigQueryEvent{
-            event: event, 
-            params: payload
+        json: BigQueryEvent {
+            event: event,
+            params: payload,
         },
     };
     let request = InsertAllRequest {
         rows: vec![row],
         ..Default::default()
     };
-    let res = state.bigquery_client
+    let res = state
+        .bigquery_client
         .tabledata()
         .insert(
             "hot-or-not-feed-intelligence",

@@ -1,5 +1,5 @@
 use candid::{CandidType, Decode, Encode, Nat};
-use ic_agent::{Agent, export::Principal};
+use ic_agent::{export::Principal, Agent};
 use reqwest::Client;
 use serde::*;
 
