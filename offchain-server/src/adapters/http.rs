@@ -9,6 +9,7 @@ use axum::{
 };
 use candid::Principal;
 use google_cloud_bigquery::http::tabledata::insert_all::{InsertAllRequest, Row};
+use serde::Serialize;
 use serde_json::Value;
 use tokio::net;
 use tower_http::{cors::CorsLayer, trace::TraceLayer};
@@ -106,6 +107,12 @@ async fn fetch_sats_balance(Path(principal): Path<Principal>) -> Result<Json<Bal
     }
 }
 
+#[derive(Serialize)]
+struct BigQueryEvent {
+    event: String, 
+    params: String,
+}
+
 async fn send_event_to_mixpanel(
     _: AuthenticatedRequest,
     State(state): State<AppState>,
@@ -132,9 +139,13 @@ async fn send_event_to_mixpanel(
         Err(_) => {}
     }
     analytics.send(&event, payload.clone()).await?;
+    let payload = serde_json::to_string(&payload).unwrap();
     let row = Row {
         insert_id: None,
-        json: payload,
+        json: BigQueryEvent{
+            event: event, 
+            params: payload
+        },
     };
     let request = InsertAllRequest {
         rows: vec![row],
@@ -150,7 +161,6 @@ async fn send_event_to_mixpanel(
         )
         .await?;
     println!("BigQuery insert response: {:?}", res);
-    tracing::info!("Event sent to Mixpanel: {}", event);
     Ok(())
 }
 
