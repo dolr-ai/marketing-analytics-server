@@ -23,6 +23,8 @@ pub enum AppError {
     ParseIntError(#[from] ParseIntError),
     #[error("Decode error {0}")]
     CandidError(#[from] candid::Error),
+    #[error("Bigquery error {0}")]
+    BigqueryError(#[from] google_cloud_bigquery::http::error::Error),
 }
 
 impl IntoResponse for AppError {

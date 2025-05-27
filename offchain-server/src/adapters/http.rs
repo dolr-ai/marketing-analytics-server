@@ -8,6 +8,7 @@ use axum::{
     routing::*,
 };
 use candid::Principal;
+use google_cloud_bigquery::http::tabledata::insert_all::{InsertAllRequest, Row};
 use serde_json::Value;
 use tokio::net;
 use tower_http::{cors::CorsLayer, trace::TraceLayer};
@@ -34,6 +35,7 @@ impl HttpServer {
         config: HttpServerConfig<'_>,
         env_config: Config,
         analytics_service: mixpanel_analytics_service::MixpanelService<MixpanelRepository>,
+        bigquery_client: google_cloud_bigquery::client::Client,
     ) -> anyhow::Result<Self> {
         let trace_layer =
             TraceLayer::new_for_http().make_span_with(|request: &axum::extract::Request<_>| {
@@ -43,6 +45,7 @@ impl HttpServer {
 
         let state = AppState {
             config: env_config,
+            bigquery_client,
             analytics_service: Arc::new(analytics_service),
         };
 
@@ -128,7 +131,26 @@ async fn send_event_to_mixpanel(
         }
         Err(_) => {}
     }
-    analytics.send(&event, payload).await?;
+    analytics.send(&event, payload.clone()).await?;
+    let row = Row {
+        insert_id: None,
+        json: payload,
+    };
+    let request = InsertAllRequest {
+        rows: vec![row],
+        ..Default::default()
+    };
+    let res = state.bigquery_client
+        .tabledata()
+        .insert(
+            "hot-or-not-feed-intelligence",
+            "analytics_335143420",
+            "test_events_analytics",
+            &request,
+        )
+        .await?;
+    println!("BigQuery insert response: {:?}", res);
+    tracing::info!("Event sent to Mixpanel: {}", event);
     Ok(())
 }
 
