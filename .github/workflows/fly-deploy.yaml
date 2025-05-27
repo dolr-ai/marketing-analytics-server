@@ -1,7 +1,7 @@
 name: Fly Deploy
 
 on:
-  push:
+  pull_request:
     branches:
       - main  
 
@@ -20,6 +20,7 @@ jobs:
         run: |
           flyctl secrets set SERVER_ACCESS_TOKEN=$SERVER_ACCESS_TOKEN --app "marketing-analytics-server" --stage
           flyctl secrets set MIXPANEL_PROJECT_TOKEN=$MIXPANEL_PROJECT_TOKEN --app "marketing-analytics-server" --stage
+          compact_google_sa_key=$(echo "$GOOGLE_SA_KEY" | jq -c .)
           flyctl secrets set GOOGLE_SA_KEY=$GOOGLE_SA_KEY --app "marketing-analytics-server" --stage
         env:
           FLY_API_TOKEN: ${{ secrets.FLY_IO_DEPLOY_TOKEN }}
