@@ -111,6 +111,7 @@ async fn fetch_sats_balance(Path(principal): Path<Principal>) -> Result<Json<Bal
 struct BigQueryEvent {
     event: String,
     params: String,
+    timestamp: String,
 }
 async fn send_event_to_mixpanel(
     _: AuthenticatedRequest,
@@ -150,6 +151,7 @@ async fn send_event_to_mixpanel(
         json: BigQueryEvent {
             event: event,
             params: payload,
+            timestamp: chrono::Utc::now().to_rfc3339(),
         },
     };
     let request = InsertAllRequest {
