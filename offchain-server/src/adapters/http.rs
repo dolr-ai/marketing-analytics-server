@@ -149,7 +149,7 @@ async fn send_event_to_mixpanel(
     let row = Row {
         insert_id: None,
         json: BigQueryEvent {
-            event: event,
+            event: format!("mp_{event}"),
             params: payload,
             timestamp: chrono::Utc::now().to_rfc3339(),
         },
