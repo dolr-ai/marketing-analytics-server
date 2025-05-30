@@ -126,27 +126,10 @@ async fn send_event_to_mixpanel(
         .and_then(|f| f.as_str())
         .map(str::to_owned)
         .unwrap_or("unknown".into());
-    let ip = payload
-        .get("ip")
-        .and_then(|f| f.as_str())
-        .map(str::to_owned);
     let user_agent = payload
         .get("user_agent")
         .and_then(|f| f.as_str())
         .map(str::to_owned);
-    if let Some(ip) = ip {
-        match super::parse_ip::lookup_ip(&ip).await {
-            Ok(resp) => {
-                if let Some(city) = resp.city {
-                    payload["$city"] = city.into();
-                }
-                if let Some(country) = resp.country {
-                    payload["$country"] = country.into();
-                }
-            }
-            Err(_) => {}
-        }
-    }
     if let Some(ua_lc) = user_agent {
         let os =
             if ua_lc.contains("mobile") || ua_lc.contains("android") || ua_lc.contains("iphone") {
