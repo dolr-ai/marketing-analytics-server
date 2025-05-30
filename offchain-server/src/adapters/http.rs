@@ -137,8 +137,12 @@ async fn send_event_to_mixpanel(
     if let Some(ip) = ip {
         match super::parse_ip::lookup_ip(&ip).await {
             Ok(resp) => {
-                payload["$city"] = resp.city.unwrap_or_default().into();
-                payload["$country"] = resp.country.unwrap_or_default().into();
+                if let Some(city) = resp.city {
+                    payload["$city"] = city.into();
+                }
+                if let Some(country) = resp.country {
+                    payload["$country"] = country.into();
+                }
             }
             Err(_) => {}
         }
