@@ -131,12 +131,14 @@ async fn send_event_to_mixpanel(
         .and_then(|f| f.as_str())
         .map(str::to_owned);
     if let Some(ua_lc) = user_agent {
-        let os =
-            if ua_lc.contains("mobile") || ua_lc.contains("android") || ua_lc.contains("iphone") {
-                "mweb"
-            } else {
-                "web"
-            };
+        let ua = ua_lc.to_ascii_lowercase();
+        let is_mweb = ua.contains("mobile")
+            || ua.contains("android")
+            || ua.contains("iphone")
+            || ua.contains("ipad")
+            || ua.contains("ipod");
+
+        let os = if is_mweb { "mweb" } else { "web" };
         payload["$os"] = os.into();
     }
     match crate::utils::btc_balance_of(principal).await {
