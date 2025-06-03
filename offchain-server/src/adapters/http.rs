@@ -15,8 +15,7 @@ use tokio::net;
 use tower_http::{cors::CorsLayer, trace::TraceLayer};
 
 use crate::{
-    application::services::mixpanel_analytics_service, config::Config, domain::errors::AppError,
-    infrastructure::repository::mixpanel_repository::MixpanelRepository,
+    application::services::mixpanel_analytics_service, config::Config, consts::DEFAULT_OS, domain::errors::AppError, infrastructure::repository::mixpanel_repository::MixpanelRepository
 };
 
 use super::{app_state::AppState, auth_middleware::AuthenticatedRequest};
@@ -132,7 +131,7 @@ async fn send_event_to_mixpanel(
         .map(str::to_owned);
     if let Some(ua_lc) = user_agent {
         let parser = Parser::new();
-        let os = parser.parse(&ua_lc).map(|f| f.os).unwrap_or("web");
+        let os = parser.parse(&ua_lc).map(|f| f.os).unwrap_or(DEFAULT_OS);
         payload["$os"] = os.into();
     }
     match crate::utils::btc_balance_of(principal).await {
