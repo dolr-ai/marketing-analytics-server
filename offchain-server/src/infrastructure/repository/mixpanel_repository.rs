@@ -28,10 +28,11 @@ impl AnalyticsRepository for MixpanelRepository {
             payload["distinct_id"] = principal.to_text().as_str().into();
             let mut user_payload = payload.clone();
             user_payload["$ip"] = payload["ip"].clone();
+            let ip = payload["ip"].clone();
             let _ = self
                 .mixpanel
                 .people
-                .set(&principal.to_text().as_str(), user_payload)
+                .set(&principal.to_text().as_str(), ip, user_payload)
                 .await?;
             Ok(principal)
         } else {
