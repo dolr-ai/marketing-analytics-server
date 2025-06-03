@@ -1,5 +1,5 @@
 use std::{net::SocketAddr, sync::Arc};
-
+use woothee::parser::Parser;
 use anyhow::Context;
 use axum::{
     extract::{Path, State},
@@ -15,8 +15,7 @@ use tokio::net;
 use tower_http::{cors::CorsLayer, trace::TraceLayer};
 
 use crate::{
-    application::services::mixpanel_analytics_service, config::Config, domain::errors::AppError,
-    infrastructure::repository::mixpanel_repository::MixpanelRepository,
+    application::services::mixpanel_analytics_service, config::Config, consts::DEFAULT_OS, domain::errors::AppError, infrastructure::repository::mixpanel_repository::MixpanelRepository
 };
 
 use super::{app_state::AppState, auth_middleware::AuthenticatedRequest};
@@ -131,14 +130,8 @@ async fn send_event_to_mixpanel(
         .and_then(|f| f.as_str())
         .map(str::to_owned);
     if let Some(ua_lc) = user_agent {
-        let ua = ua_lc.to_ascii_lowercase();
-        let is_mweb = ua.contains("mobile")
-            || ua.contains("android")
-            || ua.contains("iphone")
-            || ua.contains("ipad")
-            || ua.contains("ipod");
-
-        let os = if is_mweb { "mweb" } else { "web" };
+        let parser = Parser::new();
+        let os = parser.parse(&ua_lc).map(|f| f.os).unwrap_or(DEFAULT_OS);
         payload["$os"] = os.into();
     }
     match crate::utils::btc_balance_of(principal).await {
