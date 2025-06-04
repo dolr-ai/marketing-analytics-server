@@ -27,8 +27,12 @@ impl AnalyticsRepository for MixpanelRepository {
                 .get("user_id")
                 .and_then(|f| f.as_str())
                 .map(str::to_owned);
+            let device_id = payload
+                .get("$device_id")
+                .and_then(|f| f.as_str())
+                .map(str::to_owned);
             let principal = Principal::from_text(principal.unwrap())?;
-            if user_id.unwrap_or_default().is_empty() {
+            if !device_id.unwrap_or_default().is_empty() && user_id.unwrap_or_default().is_empty() {
                 return Ok(principal);
             }
             payload["$user_id"] = principal.to_text().as_str().into();
