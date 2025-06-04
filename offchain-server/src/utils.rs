@@ -2,6 +2,7 @@ use candid::{CandidType, Decode, Encode, Nat};
 use ic_agent::{export::Principal, Agent};
 use reqwest::Client;
 use serde::*;
+use woothee::parser::Parser;
 
 use crate::domain::errors::AppError;
 
@@ -48,4 +49,16 @@ pub async fn sats_balance_of(user: Principal) -> Result<f64, AppError> {
         .first()
         .ok_or(AppError::InvalidData("Missing SATs balance".into()))?)
     .into())
+}
+
+pub fn classify_device(user_agent: &str) -> &'static str {
+    let parser = Parser::new();
+    parser
+        .parse(user_agent)
+        .map(|result| match result.category.to_lowercase().as_str() {
+            "smartphone" | "mobilephone" | "tablet" => "mweb",
+            "pc" => "web",
+            _ => "other",
+        })
+        .unwrap_or("other")
 }
