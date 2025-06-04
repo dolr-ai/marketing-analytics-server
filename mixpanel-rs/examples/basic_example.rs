@@ -27,6 +27,7 @@ async fn main() {
         .people
         .set(
             distinct_id,
+            "117.255.93.228".into(),
             json!({
                 "$email" : "user@email.com",
                 "$device_id": &device_id_1,

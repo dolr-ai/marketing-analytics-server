@@ -23,7 +23,14 @@ impl AnalyticsRepository for MixpanelRepository {
             .and_then(|f| f.as_str())
             .map(str::to_owned);
         if principal.is_some() {
+            let user_id = payload
+                .get("user_id")
+                .and_then(|f| f.as_str())
+                .map(str::to_owned);
             let principal = Principal::from_text(principal.unwrap())?;
+            if user_id.unwrap_or_default().is_empty() {
+                return Ok(principal);
+            }
             payload["$user_id"] = principal.to_text().as_str().into();
             payload["distinct_id"] = principal.to_text().as_str().into();
             let mut user_payload = payload.clone();
@@ -32,7 +39,7 @@ impl AnalyticsRepository for MixpanelRepository {
             let _ = self
                 .mixpanel
                 .people
-                .set(&principal.to_text().as_str(), ip, user_payload)
+                .set(principal.to_text().as_str(), ip, user_payload)
                 .await?;
             Ok(principal)
         } else {
