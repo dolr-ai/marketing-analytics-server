@@ -17,6 +17,7 @@ use woothee::parser::Parser;
 use crate::{
     application::services::mixpanel_analytics_service, config::Config, consts::DEFAULT_OS,
     domain::errors::AppError, infrastructure::repository::mixpanel_repository::MixpanelRepository,
+    utils::classify_device,
 };
 
 use super::{app_state::AppState, auth_middleware::AuthenticatedRequest};
@@ -134,6 +135,7 @@ async fn send_event_to_mixpanel(
         let parser = Parser::new();
         let os = parser.parse(&ua_lc).map(|f| f.os).unwrap_or(DEFAULT_OS);
         payload["$os"] = os.into();
+        payload["device"] = classify_device(&ua_lc).into();
     }
     if let Ok(bal) = crate::utils::btc_balance_of(principal).await {
         payload["btc_balance_e8s"] = (bal as f64).into();
