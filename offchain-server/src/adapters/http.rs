@@ -1,5 +1,3 @@
-use std::{net::SocketAddr, sync::Arc};
-use woothee::parser::Parser;
 use anyhow::Context;
 use axum::{
     extract::{Path, State},
@@ -11,11 +9,14 @@ use candid::Principal;
 use google_cloud_bigquery::http::tabledata::insert_all::{InsertAllRequest, Row};
 use serde::Serialize;
 use serde_json::Value;
+use std::{net::SocketAddr, sync::Arc};
 use tokio::net;
 use tower_http::{cors::CorsLayer, trace::TraceLayer};
+use woothee::parser::Parser;
 
 use crate::{
-    application::services::mixpanel_analytics_service, config::Config, consts::DEFAULT_OS, domain::errors::AppError, infrastructure::repository::mixpanel_repository::MixpanelRepository
+    application::services::mixpanel_analytics_service, config::Config, consts::DEFAULT_OS,
+    domain::errors::AppError, infrastructure::repository::mixpanel_repository::MixpanelRepository,
 };
 
 use super::{app_state::AppState, auth_middleware::AuthenticatedRequest};
@@ -134,23 +135,11 @@ async fn send_event_to_mixpanel(
         let os = parser.parse(&ua_lc).map(|f| f.os).unwrap_or(DEFAULT_OS);
         payload["$os"] = os.into();
     }
-    match crate::utils::btc_balance_of(principal).await {
-        Ok(bal) => {
-            payload["btc_balance_e8s"] = (bal as f64).into();
-        }
-        Err(_) => {}
+    if let Ok(bal) = crate::utils::btc_balance_of(principal).await {
+        payload["btc_balance_e8s"] = (bal as f64).into();
     }
-    match crate::utils::sats_balance_of(principal).await {
-        Ok(bal) => {
-            payload["sats_balance"] = (bal).into();
-        }
-        Err(_) => {}
-    }
-    match crate::utils::sats_balance_of(principal).await {
-        Ok(bal) => {
-            payload["sats_balance"] = (bal).into();
-        }
-        Err(_) => {}
+    if let Ok(bal) = crate::utils::sats_balance_of(principal).await {
+        payload["sats_balance"] = (bal).into();
     }
     analytics.send(&event, payload.clone()).await?;
     let payload = serde_json::to_string(&payload).unwrap();

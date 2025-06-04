@@ -32,12 +32,12 @@ impl Mixpanel {
         let mut props = properties.unwrap_or_default();
         props["token"] = json!(self.token);
         // Timestamp
-        if !props.get("time").is_some() {
+        if props.get("time").is_none() {
             props["time"] = json!(chrono::Utc::now().timestamp());
         }
 
         // Insert ID
-        if !props.get("$insert_id").is_some() {
+        if props.get("$insert_id").is_none() {
             props["$insert_id"] = json!(uuid::Uuid::new_v4().to_string());
         }
 

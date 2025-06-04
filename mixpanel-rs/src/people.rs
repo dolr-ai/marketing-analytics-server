@@ -15,7 +15,12 @@ impl MixpanelPeople {
         }
     }
 
-    pub async fn set(&self, distinct_id: &str, ip: Value, properties: Value) -> Result<Value, MixpanelError> {
+    pub async fn set(
+        &self,
+        distinct_id: &str,
+        ip: Value,
+        properties: Value,
+    ) -> Result<Value, MixpanelError> {
         self.helper
             .send(json!({
                 "$distinct_id": distinct_id,
