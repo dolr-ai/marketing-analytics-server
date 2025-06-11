@@ -1,15 +1,19 @@
 use anyhow::Context;
 use axum::{
+    body::Bytes,
     extract::{Path, State},
-    http::StatusCode,
+    http::{HeaderMap, StatusCode},
+    response::IntoResponse,
     routing::*,
     Json, Router,
 };
 use candid::Principal;
 use google_cloud_bigquery::http::tabledata::insert_all::{InsertAllRequest, Row};
-use serde::Serialize;
+use hmac::{Hmac, Mac};
+use k256::sha2::Sha256;
+use serde::{Deserialize, Serialize};
 use serde_json::Value;
-use std::{net::SocketAddr, sync::Arc};
+use std::{env, net::SocketAddr, sync::Arc};
 use tokio::net;
 use tower_http::{cors::CorsLayer, trace::TraceLayer};
 use woothee::parser::Parser;
@@ -20,7 +24,10 @@ use crate::{
     utils::classify_device,
 };
 
-use super::{app_state::AppState, auth_middleware::AuthenticatedRequest};
+use super::{
+    app_state::AppState, auth_middleware::AuthenticatedRequest,
+    sentry_webhook::sentry_webhook_handler,
+};
 
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct HttpServerConfig<'a> {
@@ -84,6 +91,7 @@ fn api_routes() -> Router<AppState> {
         .route("/btc_balance/{principal}", get(fetch_btc_balance))
         .route("/sats_balance/{principal}", get(fetch_sats_balance))
         .route("/send_event", post(send_event_to_mixpanel))
+        .route("/sentry", post(sentry_webhook_handler))
 }
 
 #[derive(serde::Serialize)]
