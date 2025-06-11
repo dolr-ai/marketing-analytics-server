@@ -10,7 +10,7 @@ force_https = true
 auto_stop_machines = "off"
 auto_start_machines = false
 min_machines_running = 1
-processes = ["app"]
+processes = ["web"]
 
 [env]
 BACKEND = "LIVE"
