@@ -83,6 +83,7 @@ fn api_routes() -> Router<AppState> {
     Router::new()
         .route("/btc_balance/{principal}", get(fetch_btc_balance))
         .route("/sats_balance/{principal}", get(fetch_sats_balance))
+        .route("/is_canister_creator/{principal}", get(is_canister_creator))
         .route("/send_event", post(send_event_to_mixpanel))
 }
 
@@ -108,6 +109,12 @@ async fn fetch_sats_balance(Path(principal): Path<Principal>) -> Result<Json<Bal
     }
 }
 
+async fn is_canister_creator(Path(principal): Path<Principal>) -> Result<Json<bool>, AppError> {
+    crate::utils::is_creator_canister(principal)
+        .await
+        .map(|f| Json(f))
+}
+
 #[derive(Serialize)]
 struct BigQueryEvent {
     event: String,
@@ -131,6 +138,10 @@ async fn send_event_to_mixpanel(
         .get("user_agent")
         .and_then(|f| f.as_str())
         .map(str::to_owned);
+    let canister_id = payload
+        .get("canister_id")
+        .and_then(|f| f.as_str())
+        .map(str::to_owned);
     if let Some(ua_lc) = user_agent {
         let parser = Parser::new();
         let os = parser.parse(&ua_lc).map(|f| f.os).unwrap_or(DEFAULT_OS);
@@ -142,6 +153,11 @@ async fn send_event_to_mixpanel(
     }
     if let Ok(bal) = crate::utils::sats_balance_of(principal).await {
         payload["sats_balance"] = (bal).into();
+    }
+    if let Some(canister_id) = canister_id.map(|f| Principal::from_text(f).ok()).flatten() {
+        if let Ok(is_creator) = crate::utils::is_creator_canister(canister_id).await {
+            payload["is_creator"] = (is_creator).into();
+        }
     }
     analytics.send(&event, payload.clone()).await?;
     let payload = serde_json::to_string(&payload).unwrap();

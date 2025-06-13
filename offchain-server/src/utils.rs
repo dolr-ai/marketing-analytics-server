@@ -12,9 +12,31 @@ pub struct Icrc1Account {
     pub subaccount: Option<Vec<u8>>,
 }
 
-pub async fn btc_balance_of(owner: Principal) -> Result<u64, AppError> {
+#[derive(CandidType, Deserialize)]
+pub enum Result1 {
+    Ok(Vec<PostDetailsForFrontend>),
+    Err(GetPostsOfUserProfileError),
+}
+
+#[derive(CandidType, Deserialize)]
+pub enum GetPostsOfUserProfileError {
+    ReachedEndOfItemsList,
+    InvalidBoundsPassed,
+    ExceededMaxNumberOfItemsAllowedInOneRequest,
+}
+
+#[derive(CandidType, Deserialize)]
+pub struct PostDetailsForFrontend {
+    pub id: u64,
+}
+
+fn get_agent() -> Agent {
     let url = "https://ic0.app";
-    let agent = Agent::builder().with_url(url).build().unwrap();
+    Agent::builder().with_url(url).build().unwrap()
+}
+
+pub async fn btc_balance_of(owner: Principal) -> Result<u64, AppError> {
+    let agent = get_agent();
     let args = Encode!(&Icrc1Account {
         owner,
         subaccount: None,
@@ -30,6 +52,24 @@ pub async fn btc_balance_of(owner: Principal) -> Result<u64, AppError> {
         .await?;
     let bal = Decode!(&bytes, Nat).map(|nat_bal| nat_bal.0.clone().to_string().parse::<u64>())?;
     Ok(bal?)
+}
+
+pub async fn is_creator_canister(canister: Principal) -> Result<bool, AppError> {
+    let agent = get_agent();
+    let args = Encode!(&0u64, &1u64).unwrap();
+    let bytes = agent
+        .query(
+            &canister,
+            "get_posts_of_this_user_profile_with_pagination_cursor",
+        )
+        .with_arg(args)
+        .call()
+        .await?;
+    let response = Decode!(&bytes, Result1)?;
+    match response {
+        Result1::Ok(posts) => Ok(!posts.is_empty()),
+        _ => Ok(false),
+    }
 }
 
 #[derive(Serialize, Deserialize)]
