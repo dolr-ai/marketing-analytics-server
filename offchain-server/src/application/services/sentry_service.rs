@@ -44,15 +44,6 @@ impl SentryService {
             })
             .unwrap_or("unknown");
 
-        tracing::info!(
-            "Sentry event - Title: {}, Level: {}, Platform: {}, Environment: {}, User ID: {}",
-            title,
-            level,
-            platform,
-            environment,
-            user_id
-        );
-
         // Send to Google Chat if webhook URL is configured
         if let Ok(webhook_url) = env::var("SENTRY_GOOGLE_CHAT_WEBHOOK_URL") {
             self.send_google_chat_notification(
@@ -107,9 +98,7 @@ impl SentryService {
         let client = reqwest::Client::new();
         match client.post(webhook_url).json(&message).send().await {
             Ok(response) => {
-                if response.status().is_success() {
-                    tracing::info!("Successfully sent message to Google Chat");
-                } else {
+                if !response.status().is_success() {
                     tracing::error!(
                         "Failed to send message to Google Chat: {}",
                         response.status()
