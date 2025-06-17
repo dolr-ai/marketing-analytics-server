@@ -43,7 +43,7 @@ pub async fn insert_ip_details(payload: &mut Value) -> Result<(), AppError> {
             payload["country"] = country.into();
         }
         if let Some(loc) = ip_info.loc {
-            let coords: Vec<&str> = loc.split(',').collect();
+            let coords: Vec<&str> = loc.split(',').map(str::trim).collect();
             if coords.len() == 2 {
                 payload["latitude"] = coords[0].into();
                 payload["longitude"] = coords[1].into();
