@@ -1,27 +1,23 @@
 use anyhow::Context;
 use axum::{
-    body::Bytes,
     extract::{Path, State},
-    http::{HeaderMap, StatusCode},
-    response::IntoResponse,
+    http::StatusCode,
     routing::*,
     Json, Router,
 };
 use candid::Principal;
 use google_cloud_bigquery::http::tabledata::insert_all::{InsertAllRequest, Row};
-use hmac::{Hmac, Mac};
-use k256::sha2::Sha256;
-use serde::{Deserialize, Serialize};
+use serde::Serialize;
 use serde_json::Value;
-use std::{env, net::SocketAddr, sync::Arc};
+use std::{net::SocketAddr, sync::Arc};
 use tokio::net;
 use tower_http::{cors::CorsLayer, trace::TraceLayer};
 use woothee::parser::Parser;
 
 use crate::{
-    application::services::mixpanel_analytics_service, config::Config, consts::DEFAULT_OS,
-    domain::errors::AppError, infrastructure::repository::mixpanel_repository::MixpanelRepository,
-    utils::classify_device,
+    adapters::loc_from_ip::insert_ip_details, application::services::mixpanel_analytics_service,
+    config::Config, consts::DEFAULT_OS, domain::errors::AppError,
+    infrastructure::repository::mixpanel_repository::MixpanelRepository, utils::classify_device,
 };
 
 use super::{
@@ -168,6 +164,7 @@ async fn send_event_to_mixpanel(
         }
     }
     analytics.send(&event, payload.clone()).await?;
+    let _ = insert_ip_details(&mut payload).await;
     let payload = serde_json::to_string(&payload).unwrap();
     let row = Row {
         insert_id: None,
