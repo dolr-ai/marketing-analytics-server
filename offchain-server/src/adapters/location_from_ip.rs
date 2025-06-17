@@ -7,13 +7,30 @@ use serde_json::Value;
 use crate::domain::errors::AppError;
 
 #[derive(Deserialize, Debug)]
-pub struct IpInfo {
-    city: Option<String>,
-    region: Option<String>,
-    country: Option<String>,
-    loc: Option<String>,
-    postal: Option<String>,
-    timezone: Option<String>,
+struct GeoName {
+    names: Option<std::collections::HashMap<String, String>>,
+}
+
+#[derive(Deserialize, Debug)]
+struct Location {
+    latitude: Option<f64>,
+    longitude: Option<f64>,
+    #[serde(rename = "time_zone")]
+    time_zone: Option<String>,
+}
+
+#[derive(Deserialize, Debug)]
+struct Traits {
+    isp: Option<String>,
+}
+
+#[derive(Deserialize, Debug)]
+struct IpInfo {
+    city: Option<GeoName>,
+    country: Option<GeoName>,
+    subdivisions: Option<Vec<GeoName>>,
+    location: Option<Location>,
+    traits: Option<Traits>,
 }
 
 pub async fn insert_ip_details(payload: &mut Value) -> Result<(), AppError> {
@@ -22,39 +39,55 @@ pub async fn insert_ip_details(payload: &mut Value) -> Result<(), AppError> {
         .get("ip_addr")
         .and_then(|f| f.as_str())
         .map(str::to_owned);
-    if let Some(ip) = ip {
-        let url = format!("https://ipinfo.io/{}/json", ip);
 
+    if let Some(ip) = ip {
         let url = if let Some(token) = ip_token {
-            format!("{}?token={}", url, token)
+            format!("https://api.findip.net/{}/?token={}", ip, token)
         } else {
-            url
+            format!("https://api.findip.net/{}/", ip)
         };
 
         let response = reqwest::get(&url).await?;
         let ip_info: IpInfo = response.json().await?;
+
         if let Some(city) = ip_info.city {
-            payload["city"] = city.into();
-        }
-        if let Some(region) = ip_info.region {
-            payload["region"] = region.into();
-        }
-        if let Some(country) = ip_info.country {
-            payload["country"] = country.into();
-        }
-        if let Some(loc) = ip_info.loc {
-            let coords: Vec<&str> = loc.split(',').map(str::trim).collect();
-            if coords.len() == 2 {
-                payload["latitude"] = coords[0].into();
-                payload["longitude"] = coords[1].into();
+            if let Some(name) = city.names.and_then(|m| m.get("en").cloned()) {
+                payload["city"] = name.into();
             }
         }
-        if let Some(postal) = ip_info.postal {
-            payload["postal"] = postal.into();
+
+        if let Some(subdivisions) = ip_info.subdivisions {
+            if let Some(region) = subdivisions.first() {
+                if let Some(name) = region.names.as_ref().and_then(|m| m.get("en")) {
+                    payload["region"] = name.clone().into();
+                }
+            }
         }
-        if let Some(timezone) = ip_info.timezone {
-            payload["timezone"] = timezone.into();
+
+        if let Some(country) = ip_info.country {
+            if let Some(name) = country.names.and_then(|m| m.get("en").cloned()) {
+                payload["country"] = name.into();
+            }
+        }
+
+        if let Some(location) = ip_info.location {
+            if let Some(lat) = location.latitude {
+                payload["latitude"] = lat.into();
+            }
+            if let Some(lon) = location.longitude {
+                payload["longitude"] = lon.into();
+            }
+            if let Some(timezone) = location.time_zone {
+                payload["timezone"] = timezone.into();
+            }
+        }
+
+        if let Some(traits) = ip_info.traits {
+            if let Some(isp) = traits.isp {
+                payload["isp"] = isp.into();
+            }
         }
     }
+
     Ok(())
 }

@@ -15,9 +15,10 @@ use tower_http::{cors::CorsLayer, trace::TraceLayer};
 use woothee::parser::Parser;
 
 use crate::{
-    adapters::location_from_ip::insert_ip_details, application::services::mixpanel_analytics_service,
-    config::Config, consts::DEFAULT_OS, domain::errors::AppError,
-    infrastructure::repository::mixpanel_repository::MixpanelRepository, utils::classify_device,
+    adapters::location_from_ip::insert_ip_details,
+    application::services::mixpanel_analytics_service, config::Config, consts::DEFAULT_OS,
+    domain::errors::AppError, infrastructure::repository::mixpanel_repository::MixpanelRepository,
+    utils::classify_device,
 };
 
 use super::{
@@ -164,7 +165,9 @@ async fn send_event_to_mixpanel(
         }
     }
     analytics.send(&event, payload.clone()).await?;
-    let _ = insert_ip_details(&mut payload).await.map_err(|e| tracing::error!("Failed to insert IP details: {}", e));
+    let _ = insert_ip_details(&mut payload)
+        .await
+        .map_err(|e| tracing::error!("Failed to insert IP details: {}", e));
     let payload = serde_json::to_string(&payload).unwrap();
     let row = Row {
         insert_id: None,
