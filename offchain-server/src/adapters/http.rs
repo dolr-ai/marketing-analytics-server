@@ -165,9 +165,9 @@ async fn send_event_to_mixpanel(
         }
     }
     analytics.send(&event, payload.clone()).await?;
-    let _ = insert_ip_details(&mut payload)
-        .await
-        .map_err(|e| tracing::error!("Failed to insert IP details: {}", e));
+    // let _ = insert_ip_details(&mut payload)
+    //     .await
+    //     .map_err(|e| tracing::error!("Failed to insert IP details: {}", e));
     let payload = serde_json::to_string(&payload).unwrap();
     let row = Row {
         insert_id: None,
