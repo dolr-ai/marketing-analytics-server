@@ -18,7 +18,11 @@ BACKEND = "LIVE"
 RUST_LOG = "info"
 SERVER_PORT = "3000"
 
+[services.concurrency]
+hard_limit = 1000
+soft_limit = 500
+
 [[vm]]
-cpu_kind = "shared"
-cpus = 1
-memory_mb = 1024
+memory = '8gb'
+cpu_kind = 'shared'
+cpus = 8
