@@ -15,10 +15,7 @@ use tower_http::{cors::CorsLayer, trace::TraceLayer};
 use woothee::parser::Parser;
 
 use crate::{
-    adapters::location_from_ip::insert_ip_details,
-    application::services::mixpanel_analytics_service, config::Config, consts::DEFAULT_OS,
-    domain::errors::AppError, infrastructure::repository::mixpanel_repository::MixpanelRepository,
-    utils::classify_device,
+    adapters::location_from_ip::insert_ip_details, application::services::mixpanel_analytics_service, config::Config, consts::DEFAULT_OS, domain::errors::AppError, infrastructure::repository::mixpanel_repository::MixpanelRepository, ip_config::IpRange, utils::{classify_device, fetch_ip_details}
 };
 
 use super::{
@@ -42,6 +39,7 @@ impl HttpServer {
         env_config: Config,
         analytics_service: mixpanel_analytics_service::MixpanelService<MixpanelRepository>,
         bigquery_client: google_cloud_bigquery::client::Client,
+        ip_client: Option<crate::ip_config::IpConfig>,
     ) -> anyhow::Result<Self> {
         let trace_layer =
             TraceLayer::new_for_http().make_span_with(|request: &axum::extract::Request<_>| {
@@ -53,6 +51,7 @@ impl HttpServer {
             config: env_config,
             bigquery_client,
             analytics_service: Arc::new(analytics_service),
+            ip_client: ip_client.map(Arc::new),
         };
 
         let router = Router::new()
@@ -85,6 +84,7 @@ impl HttpServer {
 
 fn api_routes() -> Router<AppState> {
     Router::new()
+        .route("/ip/{ip}", get(get_ip_range))
         .route("/btc_balance/{principal}", get(fetch_btc_balance))
         .route("/sats_balance/{principal}", get(fetch_sats_balance))
         .route("/is_canister_creator/{principal}", get(is_canister_creator))
@@ -132,6 +132,7 @@ async fn send_event_to_mixpanel(
     Json(payload): Json<Value>,
 ) -> Result<(), AppError> {
     let mut payload = payload;
+    let ip_state = state.clone();
     let analytics = state.analytics_service;
     let principal = analytics.set_user(&mut payload).await?;
     let event = payload
@@ -164,10 +165,17 @@ async fn send_event_to_mixpanel(
             payload["is_creator"] = (is_creator).into();
         }
     }
+    let ip = payload
+        .get("ip_addr")
+        .and_then(|f| f.as_str())
+        .map(str::to_owned);
+        
     analytics.send(&event, payload.clone()).await?;
-    // let _ = insert_ip_details(&mut payload)
-    //     .await
-    //     .map_err(|e| tracing::error!("Failed to insert IP details: {}", e));
+    if let Some(ip) = ip {
+        if let Ok(res) = fetch_ip_details(&ip_state, &ip) {
+            let _ = insert_ip_details(res, &mut payload);
+        }
+    }
     let payload = serde_json::to_string(&payload).unwrap();
     let row = Row {
         insert_id: None,
@@ -194,6 +202,16 @@ async fn send_event_to_mixpanel(
     println!("BigQuery insert response: {:?}", res);
     Ok(())
 }
+
+async fn get_ip_range(
+    _: AuthenticatedRequest,
+    State(state): State<AppState>,
+    Path(ip): Path<String>,
+) -> Result<Json<IpRange>, AppError> {
+    fetch_ip_details(&state, &ip)
+        .map(|f| Json(f))
+}
+
 
 async fn health_route() -> (StatusCode, &'static str) {
     (StatusCode::OK, "OK")
