@@ -66,10 +66,16 @@ RUN adduser \
     --no-create-home \
     --uid "${UID}" \
     appuser
-USER appuser
+
+RUN mkdir -p /app
 
 # Copy the executable from the "build" stage.
 COPY --from=build /bin/marketing-analytics-server /
 
+COPY ip_db.csv.gz /app/ip_db.csv.gz
+
+RUN gzip -df /app/ip_db.csv.gz
+
+USER appuser
 # Expose the port that the application listens on.
 EXPOSE 3000

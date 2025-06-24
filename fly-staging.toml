@@ -16,6 +16,8 @@ processes = ["web"]
 BACKEND = "LIVE"
 RUST_LOG = "info"
 SERVER_PORT = "3000"
+IP_DB_PATH = "/app/ip_db.csv"
+
 
 [[vm]]
 cpu_kind = "shared"
