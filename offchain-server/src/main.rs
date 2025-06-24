@@ -5,6 +5,7 @@ pub mod application;
 pub mod config;
 use google_cloud_bigquery::client::{Client, ClientConfig};
 pub mod app_config;
+pub mod ip_config;
 pub mod consts;
 pub mod domain;
 pub mod infrastructure;
@@ -21,6 +22,9 @@ async fn main() -> anyhow::Result<()> {
 
     let bigquery_client: Client = init_bigquery_client().await;
 
+    let ip_client = crate::ip_config::IpConfig::load(&env_config.ip_db_path)
+        .map_err(|f| tracing::error!("Failed to load IP config: {}", f)).ok();
+
     let config = adapters::http::HttpServerConfig {
         port: &env_config.server_port.clone(),
     };
@@ -32,7 +36,7 @@ async fn main() -> anyhow::Result<()> {
     );
 
     let http_server =
-        adapters::http::HttpServer::new(config, env_config, analytics_service, bigquery_client)
+        adapters::http::HttpServer::new(config, env_config, analytics_service, bigquery_client, ip_client)
             .await
             .expect("Failed to create HTTP server");
     http_server.run().await

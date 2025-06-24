@@ -25,6 +25,8 @@ pub enum AppError {
     CandidError(#[from] candid::Error),
     #[error("Bigquery error {0}")]
     BigqueryError(#[from] google_cloud_bigquery::http::error::Error),
+    #[error("IPConfig error {0}")]
+    IpConfigError(String),
 }
 
 impl IntoResponse for AppError {
