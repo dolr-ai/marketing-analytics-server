@@ -201,14 +201,12 @@ async fn send_event_to_mixpanel(
         .get("ip_addr")
         .and_then(|f| f.as_str())
         .map(str::to_owned);
-
     analytics.send(&event, payload.clone()).await?;
     if let Some(ip) = ip {
         if let Ok(res) = fetch_ip_details(&ip_state, &ip) {
             let _ = insert_ip_details(res, &mut payload);
         }
     }
-
     let current_timestamp: DateTime<Utc> = Utc::now();
     let formatted_timestamp = current_timestamp.to_rfc3339();
 
