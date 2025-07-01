@@ -103,9 +103,9 @@ pub fn classify_device(user_agent: &str) -> &'static str {
         .unwrap_or("other")
 }
 
-
 pub fn fetch_ip_details(state: &AppState, ip: &str) -> Result<IpRange, AppError> {
-    state.ip_client
+    state
+        .ip_client
         .as_ref()
         .ok_or(AppError::IpConfigError("IP config not loaded".into()))?
         .look_up(&ip)

@@ -6,16 +6,24 @@ use axum::{
     Json, Router,
 };
 use candid::Principal;
+use chrono::{DateTime, Utc};
 use google_cloud_bigquery::http::tabledata::insert_all::{InsertAllRequest, Row};
 use serde::Serialize;
-use serde_json::Value;
-use std::{net::SocketAddr, sync::Arc};
+use serde_json::{json, Value};
+use std::{collections::HashMap, net::SocketAddr, sync::Arc};
 use tokio::net;
 use tower_http::{cors::CorsLayer, trace::TraceLayer};
 use woothee::parser::Parser;
 
 use crate::{
-    adapters::location_from_ip::insert_ip_details, application::services::mixpanel_analytics_service, config::Config, consts::DEFAULT_OS, domain::errors::AppError, infrastructure::repository::mixpanel_repository::MixpanelRepository, ip_config::IpRange, utils::{classify_device, fetch_ip_details}
+    adapters::location_from_ip::insert_ip_details,
+    application::services::mixpanel_analytics_service,
+    config::Config,
+    consts::{self, DEFAULT_OS},
+    domain::errors::AppError,
+    infrastructure::repository::mixpanel_repository::MixpanelRepository,
+    ip_config::IpRange,
+    utils::{classify_device, fetch_ip_details},
 };
 
 use super::{
@@ -39,6 +47,7 @@ impl HttpServer {
         env_config: Config,
         analytics_service: mixpanel_analytics_service::MixpanelService<MixpanelRepository>,
         bigquery_client: google_cloud_bigquery::client::Client,
+        pubsub_client: google_cloud_pubsub::client::Client,
         ip_client: Option<crate::ip_config::IpConfig>,
     ) -> anyhow::Result<Self> {
         let trace_layer =
@@ -47,9 +56,32 @@ impl HttpServer {
                 tracing::info_span!("http_request", method = ?request.method(), uri)
             });
 
+        // --- Create Pub/Sub Publisher once ---
+        let pubsub_topic_name = consts::PUBSUB_TOPIC_NAME; // The topic you want to publish to
+        let pubsub_topic = pubsub_client.topic(pubsub_topic_name);
+
+        // Optional: Ensure topic exists on startup
+        if !pubsub_topic.exists(None).await? {
+            tracing::warn!(
+                "Pub/Sub topic '{}' does not exist. Attempting to create it.",
+                pubsub_topic_name
+            );
+            pubsub_topic.create(None, None).await.with_context(|| {
+                format!("Failed to create Pub/Sub topic '{}'", pubsub_topic_name)
+            })?;
+            tracing::info!(
+                "Successfully created Pub/Sub topic '{}'.",
+                pubsub_topic_name
+            );
+        }
+
+        let pubsub_event_publisher = Arc::new(pubsub_topic.new_publisher(None)); // Create it ONCE
+
         let state = AppState {
             config: env_config,
             bigquery_client,
+            pubsub_event_publisher,
+            pubsub_client: Arc::new(pubsub_client),
             analytics_service: Arc::new(analytics_service),
             ip_client: ip_client.map(Arc::new),
         };
@@ -169,13 +201,50 @@ async fn send_event_to_mixpanel(
         .get("ip_addr")
         .and_then(|f| f.as_str())
         .map(str::to_owned);
-        
+
     analytics.send(&event, payload.clone()).await?;
     if let Some(ip) = ip {
         if let Ok(res) = fetch_ip_details(&ip_state, &ip) {
             let _ = insert_ip_details(res, &mut payload);
         }
     }
+
+    let current_timestamp: DateTime<Utc> = Utc::now();
+    let formatted_timestamp = current_timestamp.to_rfc3339();
+
+    let pubsub_event_data = json!({
+        "timestamp": formatted_timestamp,
+        "event_data": payload,
+    });
+
+    if let Ok(pubsub_message_data) =
+        serde_json::to_string(&pubsub_event_data).map(|f| f.into_bytes())
+    {
+        let mut attributes: HashMap<String, String> = HashMap::new();
+        attributes.insert("event_type".to_string(), event.clone());
+        attributes.insert("source".to_string(), "analytics_server".to_string());
+
+        let pubsub_message = google_cloud_googleapis::pubsub::v1::PubsubMessage {
+            data: pubsub_message_data,
+            attributes,
+            message_id: String::new(),
+            publish_time: None,
+            ordering_key: String::new(),
+        };
+        let res = state.pubsub_event_publisher.publish(pubsub_message).await;
+        match res.get().await {
+            Ok(message_id) => {
+                tracing::info!(
+                    "Successfully published Pub/Sub message with ID: {}",
+                    message_id
+                );
+            }
+            Err(e) => {
+                tracing::error!("Failed to publish Pub/Sub message: {:?}", e);
+            }
+        }
+    }
+
     let payload = serde_json::to_string(&payload).unwrap();
     let row = Row {
         insert_id: None,
@@ -208,10 +277,8 @@ async fn get_ip_range(
     State(state): State<AppState>,
     Path(ip): Path<String>,
 ) -> Result<Json<IpRange>, AppError> {
-    fetch_ip_details(&state, &ip)
-        .map(|f| Json(f))
+    fetch_ip_details(&state, &ip).map(|f| Json(f))
 }
-
 
 async fn health_route() -> (StatusCode, &'static str) {
     (StatusCode::OK, "OK")
