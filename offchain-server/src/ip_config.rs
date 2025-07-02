@@ -16,21 +16,19 @@ pub struct IpRange {
     pub city: String,
 }
 
-
 impl IpConfig {
-    pub fn load(path: &str) -> Result<Self, AppError > {
-        let file_path = PathBuf::from_str(path).map_err(|f| AppError::IpConfigError(format!("Invalid path: {}", f)))?;
+    pub fn load(path: &str) -> Result<Self, AppError> {
+        let file_path = PathBuf::from_str(path)
+            .map_err(|f| AppError::IpConfigError(format!("Invalid path: {}", f)))?;
         let looker = Looker::new(file_path);
         Ok(IpConfig { looker })
     }
 
     pub fn look_up(&self, ip: &str) -> Option<IpRange> {
-        self.looker
-            .look_up(ip)
-            .map(|f| IpRange {
-                country: f.country,
-                region: f.region,
-                city: f.city,
-            })
+        self.looker.look_up(ip).map(|f| IpRange {
+            country: f.country,
+            region: f.region,
+            city: f.city,
+        })
     }
 }
