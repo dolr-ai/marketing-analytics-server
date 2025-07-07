@@ -24,6 +24,6 @@ IP_DB_PATH = "/app/ip_db.csv"
 
 
 [[vm]]
-memory = '8gb'
+memory = '4gb'
 cpu_kind = 'shared'
-cpus = 8
+cpus = 4
