@@ -1,13 +1,12 @@
-use axum::{body::Bytes, extract::State, http::HeaderMap, response::IntoResponse};
+use axum::{body::Bytes, http::HeaderMap, response::IntoResponse};
 use hmac::{Hmac, Mac};
 use http::StatusCode;
 use k256::sha2::Sha256;
-use serde::{Deserialize, Serialize};
-use std::{env, sync::Arc};
+use serde::Deserialize;
+use std::env;
 
 use crate::application::services::sentry_service::SentryService;
 
-use super::app_state::AppState;
 
 #[derive(Debug, Deserialize)]
 pub struct SentryWebhookPayload {

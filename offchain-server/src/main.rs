@@ -31,10 +31,6 @@ async fn main() -> anyhow::Result<()> {
         .unwrap();
 
     let ip_client = crate::ip_config::IpConfig::load(&env_config.ip_db_path)
-        .map_err(|f| tracing::error!("Failed to load IP config: {}", f))
-        .ok();
-
-    let ip_client = crate::ip_config::IpConfig::load(&env_config.ip_db_path)
         .map_err(|f| tracing::error!("Failed to load IP config: {}", f)).ok();
 
     let config = adapters::http::HttpServerConfig {
