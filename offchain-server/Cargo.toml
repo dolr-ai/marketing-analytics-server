@@ -40,7 +40,8 @@ hmac = "0.12"
 hex = "0.4"
 k256 = { version = "0.13", features = ["sha2"] }
 http = "1.0"
-ip-check = "0.1.5"
+maxminddb = "0.26.0"
+
 
 [dependencies.google-cloud-googleapis]
 version = "0.16.0"
