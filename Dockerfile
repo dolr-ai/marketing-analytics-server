@@ -72,9 +72,9 @@ RUN mkdir -p /app
 # Copy the executable from the "build" stage.
 COPY --from=build /bin/marketing-analytics-server /
 
-COPY ip_db.csv.gz /app/ip_db.csv.gz
+COPY ip_db.mmdb.gz /app/ip_db.mmdb.gz
 
-RUN gzip -df /app/ip_db.csv.gz
+RUN gzip -df /app/ip_db.mmdb.gz
 
 USER appuser
 # Expose the port that the application listens on.

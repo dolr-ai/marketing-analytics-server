@@ -42,7 +42,7 @@ impl Config {
         let pub_sub_access_key =
             load_env(GOOGLE_PUBSUB_KEY).context("Failed to get GOOGLE_PUBSUB_KEY project token")?;
 
-        let ip_db_path = load_env(IP_DB_PATH).unwrap_or("ip_db.csv".to_string());
+        let ip_db_path = load_env(IP_DB_PATH).unwrap_or("ip_db.mmdb".to_string());
 
         Ok(Config {
             server_port,
