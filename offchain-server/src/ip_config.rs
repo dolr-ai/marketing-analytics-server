@@ -22,6 +22,7 @@ impl IpConfig {
             .map_err(|f| AppError::IpConfigError(format!("Invalid path: {}", f)))?;
 
         let looker = Looker::new(file_path)?;
+
         Ok(IpConfig { looker })
     }
 
