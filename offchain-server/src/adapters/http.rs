@@ -121,6 +121,7 @@ fn api_routes() -> Router<AppState> {
         .route("/sats_balance/{principal}", get(fetch_sats_balance))
         .route("/is_canister_creator/{principal}", get(is_canister_creator))
         .route("/send_event", post(send_event_to_mixpanel))
+        .route("/send_bigquery", post(send_event_to_bigquery))
         .route("/sentry", post(sentry_webhook_handler))
 }
 
@@ -197,13 +198,30 @@ async fn send_event_to_mixpanel(
             payload["is_creator"] = (is_creator).into();
         }
     }
+    analytics.send(&event, payload.clone()).await?;
+    send_to_bigquery(ip_state, payload).await
+}
+
+async fn send_event_to_bigquery(
+    State(state): State<AppState>,
+    Json(payload): Json<Value>,
+) -> Result<(), AppError> {
+    send_to_bigquery(state, payload).await
+}
+
+async fn send_to_bigquery(state: AppState, mut payload: Value) -> Result<(), AppError> {
     let ip = payload
         .get("ip_addr")
         .and_then(|f| f.as_str())
         .map(str::to_owned);
-    analytics.send(&event, payload.clone()).await?;
+
+    let event = payload
+        .get("event")
+        .and_then(|f| f.as_str())
+        .map(str::to_owned)
+        .unwrap_or("unknown".into());
     if let Some(ip) = ip {
-        if let Ok(res) = fetch_ip_details(&ip_state, &ip) {
+        if let Ok(res) = fetch_ip_details(&state, &ip) {
             let _ = insert_ip_details(res, &mut payload);
         }
     }
