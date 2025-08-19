@@ -88,6 +88,7 @@ impl HttpServer {
 
         let router = Router::new()
             .route("/health", get(health_route))
+            .route("/healthz", get(health_route))
             .nest("/api", api_routes())
             .layer(trace_layer)
             .layer(CorsLayer::permissive())
