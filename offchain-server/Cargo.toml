@@ -17,7 +17,7 @@ tracing = "0.1.40"
 tracing-subscriber = {version = "0.3", features = ["env-filter"]}
 anyhow = "1.0.97"
 thiserror = "2.0.12"
-axum = "0.8.1"
+axum = {version = "0.8.4", features = ["tokio"]}
 tokio = { version = "1.38.0", features = ["rt-multi-thread"] }
 mixpanel_rs = { path = "../mixpanel-rs", features = ["tracing"] }
 ic-agent = { version = "0.38.2", features = ["wasm-bindgen"]}
@@ -41,7 +41,7 @@ hex = "0.4"
 k256 = { version = "0.13", features = ["sha2"] }
 http = "1.0"
 maxminddb = "0.26.0"
-
+futures = "0.3.31"
 
 [dependencies.google-cloud-googleapis]
 version = "0.16.0"

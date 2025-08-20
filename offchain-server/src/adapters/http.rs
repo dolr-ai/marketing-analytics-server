@@ -8,6 +8,7 @@ use axum::{
 use candid::Principal;
 use chrono::{DateTime, Utc};
 use google_cloud_bigquery::http::tabledata::insert_all::{InsertAllRequest, Row};
+use http::HeaderMap;
 use serde::Serialize;
 use serde_json::{json, Value};
 use std::{collections::HashMap, net::SocketAddr, sync::Arc};
@@ -15,6 +16,10 @@ use tokio::net;
 use tower_http::{cors::CorsLayer, trace::TraceLayer};
 use woothee::parser::Parser;
 
+use super::{
+    app_state::AppState, auth_middleware::AuthenticatedRequest,
+    sentry_webhook::sentry_webhook_handler,
+};
 use crate::{
     adapters::location_from_ip::insert_ip_details,
     application::services::mixpanel_analytics_service,
@@ -25,11 +30,7 @@ use crate::{
     ip_config::IpRange,
     utils::{classify_device, fetch_ip_details},
 };
-
-use super::{
-    app_state::AppState, auth_middleware::AuthenticatedRequest,
-    sentry_webhook::sentry_webhook_handler,
-};
+use axum::extract::ConnectInfo;
 
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct HttpServerConfig<'a> {
@@ -108,9 +109,13 @@ impl HttpServer {
 
     pub async fn run(self) -> anyhow::Result<()> {
         tracing::debug!("listening on {}", self.listener.local_addr().unwrap());
-        axum::serve(self.listener, self.router)
-            .await
-            .context("received error from running server")?;
+        axum::serve(
+            self.listener,
+            self.router
+                .into_make_service_with_connect_info::<SocketAddr>(),
+        )
+        .await
+        .context("received error from running server")?;
         Ok(())
     }
 }
@@ -118,6 +123,7 @@ impl HttpServer {
 fn api_routes() -> Router<AppState> {
     Router::new()
         .route("/ip/{ip}", get(get_ip_range))
+        .route("/my_ip", get(get_my_ip))
         .route("/btc_balance/{principal}", get(fetch_btc_balance))
         .route("/sats_balance/{principal}", get(fetch_sats_balance))
         .route("/is_canister_creator/{principal}", get(is_canister_creator))
@@ -200,22 +206,48 @@ async fn send_event_to_mixpanel(
         }
     }
     analytics.send(&event, payload.clone()).await?;
-    send_to_bigquery(ip_state, payload).await
+    send_to_bigquery(&ip_state, payload).await
 }
 
 async fn send_event_to_bigquery(
     State(state): State<AppState>,
+    headers: HeaderMap,
+    ConnectInfo(addr): ConnectInfo<SocketAddr>,
     Json(payload): Json<Value>,
 ) -> Result<(), AppError> {
-    send_to_bigquery(state, payload).await
-}
+    let mut payload = payload;
+    if payload.get("ip_addr").is_none() {
+        let client_ip = headers
+            .get("x-forwarded-for")
+            .and_then(|h| h.to_str().ok())
+            .and_then(|s| s.split(',').next()) // take first if multiple
+            .map(|s| s.trim().to_string())
+            .unwrap_or_else(|| addr.ip().to_string()); // fallback to socket addr
+        payload["ip_addr"] = client_ip.into();
+    }
 
-async fn send_to_bigquery(state: AppState, mut payload: Value) -> Result<(), AppError> {
+    match payload.clone() {
+        Value::Array(events) => {
+            let futures = events
+                .into_iter()
+                .map(|event| send_to_bigquery(&state, event));
+            let results: Vec<_> = futures::future::join_all(futures).await;
+            for res in results {
+                res?;
+            }
+            Ok(())
+        }
+        Value::Object(_) => send_to_bigquery(&state, payload).await,
+        _ => Err(AppError::InvalidData(
+            "Event payload must be an array or object".into(),
+        )),
+    }
+}
+async fn send_to_bigquery(state: &AppState, mut payload: Value) -> Result<(), AppError> {
     let ip = payload
         .get("ip_addr")
         .and_then(|f| f.as_str())
         .map(str::to_owned);
-
     let event = payload
         .get("event")
         .and_then(|f| f.as_str())
@@ -228,19 +260,13 @@ async fn send_to_bigquery(state: AppState, mut payload: Value) -> Result<(), App
     }
     let current_timestamp: DateTime<Utc> = Utc::now();
     let formatted_timestamp = current_timestamp.to_rfc3339();
-
-    let pubsub_event_data = json!({
-        "timestamp": formatted_timestamp,
-        "event_data": payload,
-    });
-
+    let pubsub_event_data = json!({ "timestamp": formatted_timestamp, "event_data": payload, });
     if let Ok(pubsub_message_data) =
         serde_json::to_string(&pubsub_event_data).map(|f| f.into_bytes())
     {
         let mut attributes: HashMap<String, String> = HashMap::new();
         attributes.insert("event_type".to_string(), event.clone());
         attributes.insert("source".to_string(), "analytics_server".to_string());
-
         let pubsub_message = google_cloud_googleapis::pubsub::v1::PubsubMessage {
             data: pubsub_message_data,
             attributes,
@@ -261,7 +287,6 @@ async fn send_to_bigquery(state: AppState, mut payload: Value) -> Result<(), App
             }
         }
     }
-
     let payload = serde_json::to_string(&payload).unwrap();
     let row = Row {
         insert_id: None,
@@ -287,6 +312,20 @@ async fn send_to_bigquery(state: AppState, mut payload: Value) -> Result<(), App
         .await?;
     println!("BigQuery insert response: {:?}", res);
     Ok(())
+}
+
+async fn get_my_ip(
+    headers: HeaderMap,
+    ConnectInfo(addr): ConnectInfo<SocketAddr>,
+) -> Result<Json<String>, AppError> {
+    let client_ip = headers
+        .get("x-forwarded-for")
+        .and_then(|h| h.to_str().ok())
+        .and_then(|s| s.split(',').next()) // take first if multiple
+        .map(|s| s.trim().to_string())
+        .unwrap_or_else(|| addr.ip().to_string()); // fallback to socket addr
+
+    Ok(Json(client_ip))
 }
 
 async fn get_ip_range(
