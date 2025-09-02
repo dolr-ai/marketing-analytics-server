@@ -27,8 +27,8 @@ use crate::{
     consts::{self, DEFAULT_OS},
     domain::errors::AppError,
     infrastructure::repository::mixpanel_repository::MixpanelRepository,
-    ip_config::IpRange,
-    utils::{classify_device, fetch_ip_details},
+    ip_config::{IpRange, IpRangeV2},
+    utils::{classify_device, fetch_ip_details, fetch_ip_details_v2},
 };
 use axum::extract::ConnectInfo;
 
@@ -123,7 +123,9 @@ impl HttpServer {
 fn api_routes() -> Router<AppState> {
     Router::new()
         .route("/ip/{ip}", get(get_ip_range))
+        .route("/ip_v2/{ip}", get(get_ip_range_v2))
         .route("/my_ip", get(get_my_ip))
+        .route("/my_timezone", get(get_my_timezone))
         .route("/btc_balance/{principal}", get(fetch_btc_balance))
         .route("/sats_balance/{principal}", get(fetch_sats_balance))
         .route("/send_event", post(send_event_to_mixpanel))
@@ -134,6 +136,11 @@ fn api_routes() -> Router<AppState> {
 #[derive(serde::Serialize)]
 struct Balance {
     balance: f64,
+}
+
+#[derive(serde::Serialize)]
+struct TimezoneInfo {
+    timezone: String,
 }
 
 async fn fetch_btc_balance(Path(principal): Path<Principal>) -> Result<Json<Balance>, AppError> {
@@ -321,12 +328,39 @@ async fn get_my_ip(
     Ok(Json(client_ip))
 }
 
+async fn get_my_timezone(
+    State(state): State<AppState>,
+    headers: HeaderMap,
+    ConnectInfo(addr): ConnectInfo<SocketAddr>,
+) -> Result<Json<TimezoneInfo>, AppError> {
+    let client_ip = headers
+        .get("x-forwarded-for")
+        .and_then(|h| h.to_str().ok())
+        .and_then(|s| s.split(',').next()) // take first if multiple
+        .map(|s| s.trim().to_string())
+        .unwrap_or_else(|| addr.ip().to_string()); // fallback to socket addr
+
+    let ip_info = fetch_ip_details_v2(&state, &client_ip)?;
+    
+    Ok(Json(TimezoneInfo {
+        timezone: ip_info.timezone,
+    }))
+}
+
 async fn get_ip_range(
     _: AuthenticatedRequest,
     State(state): State<AppState>,
     Path(ip): Path<String>,
 ) -> Result<Json<IpRange>, AppError> {
     fetch_ip_details(&state, &ip).map(|f| Json(f))
+}
+
+async fn get_ip_range_v2(
+    _: AuthenticatedRequest,
+    State(state): State<AppState>,
+    Path(ip): Path<String>,
+) -> Result<Json<IpRangeV2>, AppError> {
+    fetch_ip_details_v2(&state, &ip).map(|f| Json(f))
 }
 
 async fn health_route() -> (StatusCode, &'static str) {
