@@ -1,10 +1,14 @@
+use crate::{adapters::app_state::AppState, domain::errors::AppError, ip_config::IpRange};
 use candid::{CandidType, Decode, Encode, Nat};
 use ic_agent::{export::Principal, Agent};
 use reqwest::Client;
 use serde::*;
 use woothee::parser::Parser;
-
-use crate::{adapters::app_state::AppState, domain::errors::AppError, ip_config::IpRange};
+use yral_canisters_client::{
+    ic::{USER_INFO_SERVICE_ID, USER_POST_SERVICE_ID},
+    individual_user_template::{IndividualUserTemplate, Result6},
+    user_post_service::{Result3, UserPostService},
+};
 
 #[derive(CandidType, Deserialize, Serialize, Clone, Debug)]
 pub struct Icrc1Account {
@@ -54,21 +58,34 @@ pub async fn btc_balance_of(owner: Principal) -> Result<u64, AppError> {
     Ok(bal?)
 }
 
-pub async fn is_creator_canister(canister: Principal) -> Result<bool, AppError> {
+pub async fn is_creator(
+    user_principal: Principal,
+    user_canister: Principal,
+) -> Result<bool, AppError> {
     let agent = get_agent();
-    let args = Encode!(&0u64, &1u64).unwrap();
-    let bytes = agent
-        .query(
-            &canister,
-            "get_posts_of_this_user_profile_with_pagination_cursor",
-        )
-        .with_arg(args)
-        .call()
-        .await?;
-    let response = Decode!(&bytes, Result1)?;
-    match response {
-        Result1::Ok(posts) => Ok(!posts.is_empty()),
-        _ => Ok(false),
+
+    match user_canister {
+        USER_INFO_SERVICE_ID => {
+            let user_post_service = UserPostService(USER_POST_SERVICE_ID, &agent);
+            let posts_result = user_post_service
+                .get_posts_of_this_user_profile_with_pagination(user_principal, 0, 1)
+                .await?;
+
+            match posts_result {
+                Result3::Ok(posts) => Ok(!posts.is_empty()),
+                Result3::Err(_e) => Ok(false),
+            }
+        }
+        _ => {
+            let individual_user_service = IndividualUserTemplate(user_canister, &agent);
+            let post_results = individual_user_service
+                .get_posts_of_this_user_profile_with_pagination_cursor(064, 10u64)
+                .await?;
+            match post_results {
+                Result6::Ok(posts) => Ok(!posts.is_empty()),
+                Result6::Err(_e) => Ok(false),
+            }
+        }
     }
 }
 
