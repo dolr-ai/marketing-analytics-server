@@ -20,7 +20,7 @@ thiserror = "2.0.12"
 axum = {version = "0.8.4", features = ["tokio"]}
 tokio = { version = "1.38.0", features = ["rt-multi-thread"] }
 mixpanel_rs = { path = "../mixpanel-rs", features = ["tracing"] }
-ic-agent = { version = "0.38.2", features = ["wasm-bindgen"]}
+ic-agent = { version = "0.41.0", features = ["wasm-bindgen"]}
 candid = "0.10.3"
 reqwest.workspace = true
 google-cloud-bigquery = { version = "0.13.1", default-features = false, features = [
@@ -42,6 +42,7 @@ k256 = { version = "0.13", features = ["sha2"] }
 http = "1.0"
 maxminddb = "0.26.0"
 futures = "0.3.31"
+yral-canisters-client = {workspace = true}
 
 [dependencies.google-cloud-googleapis]
 version = "0.16.0"

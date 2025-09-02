@@ -128,7 +128,6 @@ fn api_routes() -> Router<AppState> {
         .route("/my_timezone", get(get_my_timezone))
         .route("/btc_balance/{principal}", get(fetch_btc_balance))
         .route("/sats_balance/{principal}", get(fetch_sats_balance))
-        .route("/is_canister_creator/{principal}", get(is_canister_creator))
         .route("/send_event", post(send_event_to_mixpanel))
         .route("/send_bigquery", post(send_event_to_bigquery))
         .route("/sentry", post(sentry_webhook_handler))
@@ -159,12 +158,6 @@ async fn fetch_sats_balance(Path(principal): Path<Principal>) -> Result<Json<Bal
         Ok(balance) => Ok(Json(Balance { balance })),
         Err(e) => Err(e),
     }
-}
-
-async fn is_canister_creator(Path(principal): Path<Principal>) -> Result<Json<bool>, AppError> {
-    crate::utils::is_creator_canister(principal)
-        .await
-        .map(|f| Json(f))
 }
 
 #[derive(Serialize)]
@@ -208,7 +201,7 @@ async fn send_event_to_mixpanel(
         payload["sats_balance"] = (bal).into();
     }
     if let Some(canister_id) = canister_id.map(|f| Principal::from_text(f).ok()).flatten() {
-        if let Ok(is_creator) = crate::utils::is_creator_canister(canister_id).await {
+        if let Ok(is_creator) = crate::utils::is_creator(principal, canister_id).await {
             payload["is_creator"] = (is_creator).into();
         }
     }
