@@ -4,7 +4,7 @@ use reqwest::Client;
 use serde::*;
 use woothee::parser::Parser;
 
-use crate::{adapters::app_state::AppState, domain::errors::AppError, ip_config::IpRange};
+use crate::{adapters::app_state::AppState, domain::errors::AppError, ip_config::{IpRange, IpRangeV2}};
 
 #[derive(CandidType, Deserialize, Serialize, Clone, Debug)]
 pub struct Icrc1Account {
@@ -109,6 +109,16 @@ pub fn fetch_ip_details(state: &AppState, ip: &str) -> Result<IpRange, AppError>
         .as_ref()
         .ok_or(AppError::IpConfigError("IP config not loaded".into()))?
         .look_up(&ip)
+        .ok_or(AppError::InvalidData(format!("IP not found: {}", ip)))
+        .map_err(|e| AppError::IpConfigError(format!("Failed to look up IP: {}", e)))
+}
+
+pub fn fetch_ip_details_v2(state: &AppState, ip: &str) -> Result<IpRangeV2, AppError> {
+    state
+        .ip_client
+        .as_ref()
+        .ok_or(AppError::IpConfigError("IP config not loaded".into()))?
+        .look_up_v2(&ip)
         .ok_or(AppError::InvalidData(format!("IP not found: {}", ip)))
         .map_err(|e| AppError::IpConfigError(format!("Failed to look up IP: {}", e)))
 }
