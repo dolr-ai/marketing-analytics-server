@@ -14,7 +14,7 @@ min_machines_running = 1
 processes = ["web"]
 [http_service.concurrency]
 hard_limit = 2000
-soft_limit = 500
+soft_limit = 10
 
 [env]
 BACKEND = "LIVE"
