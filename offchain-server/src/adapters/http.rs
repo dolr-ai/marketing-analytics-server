@@ -231,45 +231,30 @@ async fn send_event_to_bigquery(
     if let Some(event_data) = payload.get("event_data") {
         if let Some(rows) = event_data.get("rows").and_then(|r| r.as_array()) {
             // Extract common fields from outer event_data (excluding "rows")
-            let mut common_fields = event_data.clone();
-            if let Some(obj) = common_fields.as_object_mut() {
-                obj.remove("rows");
-            }
+            let common_fields = if let Some(obj) = event_data.as_object() {
+                obj.iter()
+                    .filter(|(key, _)| *key != "rows")
+                    .map(|(k, v)| (k.clone(), v.clone()))
+                    .collect::<serde_json::Map<String, Value>>()
+            } else {
+                serde_json::Map::new()
+            };
             
             // Process each event in rows, merging with common fields
             let futures = rows.iter().map(|row| {
-                let mut merged_event = json!({});
+                // Determine the base event object
+                let base_event = row.get("event_data").unwrap_or(row);
                 
-                // If the row has an "event_data" field, merge it with common fields
-                if let Some(row_event_data) = row.get("event_data") {
-                    if let Some(row_obj) = row_event_data.as_object() {
-                        // Start with common fields
-                        if let Some(common_obj) = common_fields.as_object() {
-                            if let Some(merged_obj) = merged_event.as_object_mut() {
-                                for (key, value) in common_obj {
-                                    merged_obj.insert(key.clone(), value.clone());
-                                }
-                            }
-                        }
-                        // Merge row-specific fields (they take precedence)
-                        if let Some(merged_obj) = merged_event.as_object_mut() {
-                            for (key, value) in row_obj {
-                                merged_obj.insert(key.clone(), value.clone());
-                            }
-                        }
+                // Merge common fields with event fields (event fields take precedence)
+                let merged_event = if let Some(event_obj) = base_event.as_object() {
+                    let mut merged = common_fields.clone();
+                    for (key, value) in event_obj {
+                        merged.insert(key.clone(), value.clone());
                     }
+                    Value::Object(merged)
                 } else {
-                    // If row doesn't have event_data, treat the row itself as the event
-                    merged_event = row.clone();
-                    // Merge common fields
-                    if let Some(common_obj) = common_fields.as_object() {
-                        if let Some(merged_obj) = merged_event.as_object_mut() {
-                            for (key, value) in common_obj {
-                                merged_obj.insert(key.clone(), value.clone());
-                            }
-                        }
-                    }
-                }
+                    Value::Object(common_fields.clone())
+                };
                 
                 send_to_bigquery(&state, merged_event)
             });
