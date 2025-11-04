@@ -268,22 +268,25 @@ async fn send_event_to_bigquery(
         EventPayload::Bulk(bulk_payload) => {
             // Handle nested bulk event structure from mobile team
             let common_fields = bulk_payload.event_data.common_fields;
-            
+
             // Process each event in rows, merging with common fields
             let futures = bulk_payload.event_data.rows.iter().map(|row| {
                 // Merge common fields with event fields (event fields take precedence)
                 let mut merged = common_fields.clone();
-                
+
                 // Add IP address if not present in common fields
-                merged.entry("ip_addr".to_string())
+                merged
+                    .entry("ip_addr".to_string())
                     .or_insert_with(|| Value::String(client_ip.clone()));
-                
+
                 // Extend with event-specific fields
                 merged.extend(row.event_data.fields.clone());
-                
+
+                tracing::info!("Inserting single row  from bulk data {merged:?}",);
+
                 send_to_bigquery(&state, Value::Object(merged.into_iter().collect()))
             });
-            
+
             let results: Vec<_> = futures::future::join_all(futures).await;
             for res in results {
                 res?;
@@ -292,6 +295,7 @@ async fn send_event_to_bigquery(
         }
         EventPayload::Array(events) => {
             // Handle array of events
+            tracing::info!("Recieved Array of events from bulk data {events:?}",);
             let futures = events.into_iter().map(|mut event| {
                 // Add IP address if not present
                 if let Some(obj) = event.as_object_mut() {
@@ -300,7 +304,7 @@ async fn send_event_to_bigquery(
                 }
                 send_to_bigquery(&state, event)
             });
-            
+
             let results: Vec<_> = futures::future::join_all(futures).await;
             for res in results {
                 res?;
@@ -313,6 +317,7 @@ async fn send_event_to_bigquery(
                 obj.entry("ip_addr".to_string())
                     .or_insert_with(|| Value::String(client_ip.clone()));
             }
+            tracing::info!("Recieved single payload from bulk data {event:?}",);
             send_to_bigquery(&state, event).await
         }
     }
@@ -415,7 +420,7 @@ async fn get_my_timezone(
         .unwrap_or_else(|| addr.ip().to_string()); // fallback to socket addr
 
     let ip_info = fetch_ip_details_v2(&state, &client_ip)?;
-    
+
     Ok(Json(TimezoneInfo {
         timezone: ip_info.timezone,
     }))
@@ -479,11 +484,17 @@ mod tests {
         if let Ok(EventPayload::Bulk(bulk)) = payload {
             assert_eq!(bulk.event_data.rows.len(), 2);
             assert_eq!(
-                bulk.event_data.common_fields.get("country").and_then(|v| v.as_str()),
+                bulk.event_data
+                    .common_fields
+                    .get("country")
+                    .and_then(|v| v.as_str()),
                 Some("India")
             );
             assert_eq!(
-                bulk.event_data.common_fields.get("city").and_then(|v| v.as_str()),
+                bulk.event_data
+                    .common_fields
+                    .get("city")
+                    .and_then(|v| v.as_str()),
                 Some("Mumbai")
             );
         } else {
@@ -525,7 +536,10 @@ mod tests {
         }"#;
 
         let payload: Result<EventPayload, _> = serde_json::from_str(json_str);
-        assert!(payload.is_ok(), "Failed to deserialize single event payload");
+        assert!(
+            payload.is_ok(),
+            "Failed to deserialize single event payload"
+        );
 
         if let Ok(EventPayload::Single(event)) = payload {
             assert_eq!(
@@ -553,7 +567,10 @@ mod tests {
         }"#;
 
         let payload: Result<EventPayload, _> = serde_json::from_str(json_str);
-        assert!(payload.is_ok(), "Failed to deserialize bulk event with empty common fields");
+        assert!(
+            payload.is_ok(),
+            "Failed to deserialize bulk event with empty common fields"
+        );
 
         if let Ok(EventPayload::Bulk(bulk)) = payload {
             assert_eq!(bulk.event_data.rows.len(), 1);
@@ -578,17 +595,139 @@ mod tests {
             "event_data": {
                 "city": "Mumbai",
                 "country": "India",
-                "ip_addr": "127.0.0.1",
+                "ip_addr": "2409:4042:2302:d3e6:2991:4780:6b5a:8390",
+                "region": "Maharashtra",
                 "rows": [
-                    {
-                        "event_data": {
-                            "event": "video_viewed",
-                            "canister_id": "test-id"
-                        }
-                    }
+                {
+                    "event_data": {
+                    "canister_id": "ivkka-7qaaa-aaaas-qbg3q-cai",
+                    "custom_device_id": "peqet-s655n-k2c4l-oxheh-hwuvh-xxqdk-uuiia-b5y6m-qewit-w5ptb-bqe",
+                    "device": "app",
+                    "distinct_id": "peqet-s655n-k2c4l-oxheh-hwuvh-xxqdk-uuiia-b5y6m-qewit-w5ptb-bqe",
+                    "event": "video_started",
+                    "feature_name": "auth",
+                    "game_type": "smiley",
+                    "is_creator": false,
+                    "is_game_enabled": true,
+                    "is_logged_in": false,
+                    "is_nsfw": false,
+                    "like_count": 0,
+                    "publisher_user_id": "nzlex-doomk-jojhy-vaahf-tpr5e-22lig-e2uvd-hho5a-goapc-ozxv2-eqe",
+                    "share_count": 0,
+                    "token_type": "yral",
+                    "type": "com.yral.shared.analytics.events.VideoStartedEventData",
+                    "user_id": "peqet-s655n-k2c4l-oxheh-hwuvh-xxqdk-uuiia-b5y6m-qewit-w5ptb-bqe",
+                    "video_id": "ad6543cfb0beaf37c78e1c303591429e",
+                    "view_count": 0,
+                    "wallet_balance": 25
+                    },
+                    "timestamp": "2025-11-04T13:12:51.278+00:00"
+                },
+                {
+                    "event_data": {
+                    "canister_id": "ivkka-7qaaa-aaaas-qbg3q-cai",
+                    "custom_device_id": "peqet-s655n-k2c4l-oxheh-hwuvh-xxqdk-uuiia-b5y6m-qewit-w5ptb-bqe",
+                    "device": "app",
+                    "distinct_id": "peqet-s655n-k2c4l-oxheh-hwuvh-xxqdk-uuiia-b5y6m-qewit-w5ptb-bqe",
+                    "event": "video_viewed",
+                    "feature_name": "auth",
+                    "game_type": "smiley",
+                    "is_creator": false,
+                    "is_game_enabled": true,
+                    "is_logged_in": false,
+                    "is_nsfw": false,
+                    "like_count": 0,
+                    "publisher_user_id": "ho6gc-wi33b-apjqk-7zy6v-xxnb2-ogzaq-dclrs-pnbyj-5uhdu-g2nvq-5ae",
+                    "share_count": 0,
+                    "token_type": "yral",
+                    "type": "com.yral.shared.analytics.events.VideoViewedEventData",
+                    "user_id": "peqet-s655n-k2c4l-oxheh-hwuvh-xxqdk-uuiia-b5y6m-qewit-w5ptb-bqe",
+                    "video_id": "9a9570aeb87b4b4ba853f893281be8ae",
+                    "view_count": 2,
+                    "wallet_balance": 25
+                    },
+                    "timestamp": "2025-11-04T13:12:51.289+00:00"
+                },
+                {
+                    "event_data": {
+                    "canister_id": "ivkka-7qaaa-aaaas-qbg3q-cai",
+                    "custom_device_id": "peqet-s655n-k2c4l-oxheh-hwuvh-xxqdk-uuiia-b5y6m-qewit-w5ptb-bqe",
+                    "device": "app",
+                    "distinct_id": "peqet-s655n-k2c4l-oxheh-hwuvh-xxqdk-uuiia-b5y6m-qewit-w5ptb-bqe",
+                    "event": "video_viewed",
+                    "feature_name": "auth",
+                    "game_type": "smiley",
+                    "is_creator": false,
+                    "is_game_enabled": true,
+                    "is_logged_in": false,
+                    "is_nsfw": false,
+                    "like_count": 0,
+                    "publisher_user_id": "ho6gc-wi33b-apjqk-7zy6v-xxnb2-ogzaq-dclrs-pnbyj-5uhdu-g2nvq-5ae",
+                    "share_count": 0,
+                    "token_type": "yral",
+                    "type": "com.yral.shared.analytics.events.VideoViewedEventData",
+                    "user_id": "peqet-s655n-k2c4l-oxheh-hwuvh-xxqdk-uuiia-b5y6m-qewit-w5ptb-bqe",
+                    "video_id": "9a9570aeb87b4b4ba853f893281be8ae",
+                    "view_count": 2,
+                    "wallet_balance": 25
+                    },
+                    "timestamp": "2025-11-04T13:12:51.293+00:00"
+                },
+                {
+                    "event_data": {
+                    "canister_id": "ivkka-7qaaa-aaaas-qbg3q-cai",
+                    "custom_device_id": "peqet-s655n-k2c4l-oxheh-hwuvh-xxqdk-uuiia-b5y6m-qewit-w5ptb-bqe",
+                    "device": "app",
+                    "distinct_id": "peqet-s655n-k2c4l-oxheh-hwuvh-xxqdk-uuiia-b5y6m-qewit-w5ptb-bqe",
+                    "event": "video_started",
+                    "feature_name": "auth",
+                    "game_type": "smiley",
+                    "is_creator": false,
+                    "is_game_enabled": true,
+                    "is_logged_in": false,
+                    "is_nsfw": false,
+                    "like_count": 0,
+                    "publisher_user_id": "ho6gc-wi33b-apjqk-7zy6v-xxnb2-ogzaq-dclrs-pnbyj-5uhdu-g2nvq-5ae",
+                    "share_count": 0,
+                    "token_type": "yral",
+                    "type": "com.yral.shared.analytics.events.VideoStartedEventData",
+                    "user_id": "peqet-s655n-k2c4l-oxheh-hwuvh-xxqdk-uuiia-b5y6m-qewit-w5ptb-bqe",
+                    "video_id": "9a9570aeb87b4b4ba853f893281be8ae",
+                    "view_count": 2,
+                    "wallet_balance": 25
+                    },
+                    "timestamp": "2025-11-04T13:12:51.296+00:00"
+                },
+                {
+                    "event_data": {
+                    "canister_id": "ivkka-7qaaa-aaaas-qbg3q-cai",
+                    "custom_device_id": "peqet-s655n-k2c4l-oxheh-hwuvh-xxqdk-uuiia-b5y6m-qewit-w5ptb-bqe",
+                    "device": "app",
+                    "distinct_id": "peqet-s655n-k2c4l-oxheh-hwuvh-xxqdk-uuiia-b5y6m-qewit-w5ptb-bqe",
+                    "event": "video_viewed",
+                    "feature_name": "auth",
+                    "game_type": "smiley",
+                    "is_creator": false,
+                    "is_game_enabled": true,
+                    "is_logged_in": false,
+                    "is_nsfw": false,
+                    "like_count": 0,
+                    "publisher_user_id": "hz7ua-h4jap-ekowp-kjkrl-csgak-w2mzh-pkdso-kkalk-cgdsp-qnw6v-kae",
+                    "share_count": 0,
+                    "token_type": "yral",
+                    "type": "com.yral.shared.analytics.events.VideoViewedEventData",
+                    "user_id": "peqet-s655n-k2c4l-oxheh-hwuvh-xxqdk-uuiia-b5y6m-qewit-w5ptb-bqe",
+                    "video_id": "e672815db792350707679035ad2e3950",
+                    "view_count": 0,
+                    "wallet_balance": 25
+                    },
+                    "timestamp": "2025-11-04T13:12:51.299+00:00"
+                }
                 ]
+            },
+            "timestamp": "2025-11-04T13:12:53.846270398+00:00"
             }
-        }"#;
+        "#;
 
         let payload: EventPayload = serde_json::from_str(json_str).unwrap();
 
@@ -597,18 +736,21 @@ mod tests {
             assert!(bulk.event_data.common_fields.contains_key("city"));
             assert!(bulk.event_data.common_fields.contains_key("country"));
             assert!(bulk.event_data.common_fields.contains_key("ip_addr"));
-            
+
             // Verify row fields
             let row = &bulk.event_data.rows[0];
             assert!(row.event_data.fields.contains_key("event"));
             assert!(row.event_data.fields.contains_key("canister_id"));
-            
+
             // Simulate merging
             let mut merged = bulk.event_data.common_fields.clone();
             merged.extend(row.event_data.fields.clone());
-            
+
             assert_eq!(merged.get("city").and_then(|v| v.as_str()), Some("Mumbai"));
-            assert_eq!(merged.get("event").and_then(|v| v.as_str()), Some("video_viewed"));
+            assert_eq!(
+                merged.get("event").and_then(|v| v.as_str()),
+                Some("video_started")
+            );
         } else {
             panic!("Expected bulk event payload");
         }
