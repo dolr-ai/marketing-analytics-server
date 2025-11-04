@@ -226,6 +226,62 @@ async fn send_event_to_bigquery(
         payload["ip_addr"] = client_ip.into();
     }
 
+    // Handle nested bulk event structure from mobile team
+    // Format: { "event_data": { "city": "", "country": "", "ip_addr": "", "rows": [...] } }
+    if let Some(event_data) = payload.get("event_data") {
+        if let Some(rows) = event_data.get("rows").and_then(|r| r.as_array()) {
+            // Extract common fields from outer event_data (excluding "rows")
+            let mut common_fields = event_data.clone();
+            if let Some(obj) = common_fields.as_object_mut() {
+                obj.remove("rows");
+            }
+            
+            // Process each event in rows, merging with common fields
+            let futures = rows.iter().map(|row| {
+                let mut merged_event = json!({});
+                
+                // If the row has an "event_data" field, merge it with common fields
+                if let Some(row_event_data) = row.get("event_data") {
+                    if let Some(row_obj) = row_event_data.as_object() {
+                        // Start with common fields
+                        if let Some(common_obj) = common_fields.as_object() {
+                            if let Some(merged_obj) = merged_event.as_object_mut() {
+                                for (key, value) in common_obj {
+                                    merged_obj.insert(key.clone(), value.clone());
+                                }
+                            }
+                        }
+                        // Merge row-specific fields (they take precedence)
+                        if let Some(merged_obj) = merged_event.as_object_mut() {
+                            for (key, value) in row_obj {
+                                merged_obj.insert(key.clone(), value.clone());
+                            }
+                        }
+                    }
+                } else {
+                    // If row doesn't have event_data, treat the row itself as the event
+                    merged_event = row.clone();
+                    // Merge common fields
+                    if let Some(common_obj) = common_fields.as_object() {
+                        if let Some(merged_obj) = merged_event.as_object_mut() {
+                            for (key, value) in common_obj {
+                                merged_obj.insert(key.clone(), value.clone());
+                            }
+                        }
+                    }
+                }
+                
+                send_to_bigquery(&state, merged_event)
+            });
+            
+            let results: Vec<_> = futures::future::join_all(futures).await;
+            for res in results {
+                res?;
+            }
+            return Ok(());
+        }
+    }
+
     match payload.clone() {
         Value::Array(events) => {
             let futures = events
