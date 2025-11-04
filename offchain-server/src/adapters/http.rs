@@ -189,18 +189,12 @@ struct BulkEventData {
     rows: Vec<EventRow>,
 }
 
-/// Top-level structure for bulk events
-#[derive(Debug, Clone, Deserialize, Serialize)]
-struct BulkEventPayload {
-    event_data: BulkEventData,
-}
-
 /// Enum to represent different event payload types
 #[derive(Debug, Clone, Deserialize, Serialize)]
 #[serde(untagged)]
 enum EventPayload {
     /// Bulk event with nested structure from mobile clients
-    Bulk(BulkEventPayload),
+    Bulk(BulkEventData),
     /// Array of individual events
     Array(Vec<Value>),
     /// Single event object
@@ -267,10 +261,10 @@ async fn send_event_to_bigquery(
     match payload {
         EventPayload::Bulk(bulk_payload) => {
             // Handle nested bulk event structure from mobile team
-            let common_fields = bulk_payload.event_data.common_fields;
+            let common_fields = bulk_payload.common_fields;
 
             // Process each event in rows, merging with common fields
-            let futures = bulk_payload.event_data.rows.iter().map(|row| {
+            let futures = bulk_payload.rows.iter().map(|row| {
                 // Merge common fields with event fields (event fields take precedence)
                 let mut merged = common_fields.clone();
 
@@ -482,19 +476,13 @@ mod tests {
         assert!(payload.is_ok(), "Failed to deserialize bulk event payload");
 
         if let Ok(EventPayload::Bulk(bulk)) = payload {
-            assert_eq!(bulk.event_data.rows.len(), 2);
+            assert_eq!(bulk.rows.len(), 2);
             assert_eq!(
-                bulk.event_data
-                    .common_fields
-                    .get("country")
-                    .and_then(|v| v.as_str()),
+                bulk.common_fields.get("country").and_then(|v| v.as_str()),
                 Some("India")
             );
             assert_eq!(
-                bulk.event_data
-                    .common_fields
-                    .get("city")
-                    .and_then(|v| v.as_str()),
+                bulk.common_fields.get("city").and_then(|v| v.as_str()),
                 Some("Mumbai")
             );
         } else {
@@ -573,7 +561,7 @@ mod tests {
         );
 
         if let Ok(EventPayload::Bulk(bulk)) = payload {
-            assert_eq!(bulk.event_data.rows.len(), 1);
+            assert_eq!(bulk.rows.len(), 1);
         } else {
             panic!("Expected bulk event payload");
         }
@@ -592,158 +580,153 @@ mod tests {
     fn test_bulk_event_fields_merging() {
         // Test that we can properly extract fields for merging
         let json_str = r#"{
-            "event_data": {
-                "city": "Mumbai",
-                "country": "India",
-                "ip_addr": "2409:4042:2302:d3e6:2991:4780:6b5a:8390",
-                "region": "Maharashtra",
-                "rows": [
-                {
-                    "event_data": {
-                    "canister_id": "ivkka-7qaaa-aaaas-qbg3q-cai",
-                    "custom_device_id": "peqet-s655n-k2c4l-oxheh-hwuvh-xxqdk-uuiia-b5y6m-qewit-w5ptb-bqe",
-                    "device": "app",
-                    "distinct_id": "peqet-s655n-k2c4l-oxheh-hwuvh-xxqdk-uuiia-b5y6m-qewit-w5ptb-bqe",
-                    "event": "video_started",
-                    "feature_name": "auth",
-                    "game_type": "smiley",
-                    "is_creator": false,
-                    "is_game_enabled": true,
-                    "is_logged_in": false,
-                    "is_nsfw": false,
-                    "like_count": 0,
-                    "publisher_user_id": "nzlex-doomk-jojhy-vaahf-tpr5e-22lig-e2uvd-hho5a-goapc-ozxv2-eqe",
-                    "share_count": 0,
-                    "token_type": "yral",
-                    "type": "com.yral.shared.analytics.events.VideoStartedEventData",
-                    "user_id": "peqet-s655n-k2c4l-oxheh-hwuvh-xxqdk-uuiia-b5y6m-qewit-w5ptb-bqe",
-                    "video_id": "ad6543cfb0beaf37c78e1c303591429e",
-                    "view_count": 0,
-                    "wallet_balance": 25
-                    },
-                    "timestamp": "2025-11-04T13:12:51.278+00:00"
-                },
-                {
-                    "event_data": {
-                    "canister_id": "ivkka-7qaaa-aaaas-qbg3q-cai",
-                    "custom_device_id": "peqet-s655n-k2c4l-oxheh-hwuvh-xxqdk-uuiia-b5y6m-qewit-w5ptb-bqe",
-                    "device": "app",
-                    "distinct_id": "peqet-s655n-k2c4l-oxheh-hwuvh-xxqdk-uuiia-b5y6m-qewit-w5ptb-bqe",
-                    "event": "video_viewed",
-                    "feature_name": "auth",
-                    "game_type": "smiley",
-                    "is_creator": false,
-                    "is_game_enabled": true,
-                    "is_logged_in": false,
-                    "is_nsfw": false,
-                    "like_count": 0,
-                    "publisher_user_id": "ho6gc-wi33b-apjqk-7zy6v-xxnb2-ogzaq-dclrs-pnbyj-5uhdu-g2nvq-5ae",
-                    "share_count": 0,
-                    "token_type": "yral",
-                    "type": "com.yral.shared.analytics.events.VideoViewedEventData",
-                    "user_id": "peqet-s655n-k2c4l-oxheh-hwuvh-xxqdk-uuiia-b5y6m-qewit-w5ptb-bqe",
-                    "video_id": "9a9570aeb87b4b4ba853f893281be8ae",
-                    "view_count": 2,
-                    "wallet_balance": 25
-                    },
-                    "timestamp": "2025-11-04T13:12:51.289+00:00"
-                },
-                {
-                    "event_data": {
-                    "canister_id": "ivkka-7qaaa-aaaas-qbg3q-cai",
-                    "custom_device_id": "peqet-s655n-k2c4l-oxheh-hwuvh-xxqdk-uuiia-b5y6m-qewit-w5ptb-bqe",
-                    "device": "app",
-                    "distinct_id": "peqet-s655n-k2c4l-oxheh-hwuvh-xxqdk-uuiia-b5y6m-qewit-w5ptb-bqe",
-                    "event": "video_viewed",
-                    "feature_name": "auth",
-                    "game_type": "smiley",
-                    "is_creator": false,
-                    "is_game_enabled": true,
-                    "is_logged_in": false,
-                    "is_nsfw": false,
-                    "like_count": 0,
-                    "publisher_user_id": "ho6gc-wi33b-apjqk-7zy6v-xxnb2-ogzaq-dclrs-pnbyj-5uhdu-g2nvq-5ae",
-                    "share_count": 0,
-                    "token_type": "yral",
-                    "type": "com.yral.shared.analytics.events.VideoViewedEventData",
-                    "user_id": "peqet-s655n-k2c4l-oxheh-hwuvh-xxqdk-uuiia-b5y6m-qewit-w5ptb-bqe",
-                    "video_id": "9a9570aeb87b4b4ba853f893281be8ae",
-                    "view_count": 2,
-                    "wallet_balance": 25
-                    },
-                    "timestamp": "2025-11-04T13:12:51.293+00:00"
-                },
-                {
-                    "event_data": {
-                    "canister_id": "ivkka-7qaaa-aaaas-qbg3q-cai",
-                    "custom_device_id": "peqet-s655n-k2c4l-oxheh-hwuvh-xxqdk-uuiia-b5y6m-qewit-w5ptb-bqe",
-                    "device": "app",
-                    "distinct_id": "peqet-s655n-k2c4l-oxheh-hwuvh-xxqdk-uuiia-b5y6m-qewit-w5ptb-bqe",
-                    "event": "video_started",
-                    "feature_name": "auth",
-                    "game_type": "smiley",
-                    "is_creator": false,
-                    "is_game_enabled": true,
-                    "is_logged_in": false,
-                    "is_nsfw": false,
-                    "like_count": 0,
-                    "publisher_user_id": "ho6gc-wi33b-apjqk-7zy6v-xxnb2-ogzaq-dclrs-pnbyj-5uhdu-g2nvq-5ae",
-                    "share_count": 0,
-                    "token_type": "yral",
-                    "type": "com.yral.shared.analytics.events.VideoStartedEventData",
-                    "user_id": "peqet-s655n-k2c4l-oxheh-hwuvh-xxqdk-uuiia-b5y6m-qewit-w5ptb-bqe",
-                    "video_id": "9a9570aeb87b4b4ba853f893281be8ae",
-                    "view_count": 2,
-                    "wallet_balance": 25
-                    },
-                    "timestamp": "2025-11-04T13:12:51.296+00:00"
-                },
-                {
-                    "event_data": {
-                    "canister_id": "ivkka-7qaaa-aaaas-qbg3q-cai",
-                    "custom_device_id": "peqet-s655n-k2c4l-oxheh-hwuvh-xxqdk-uuiia-b5y6m-qewit-w5ptb-bqe",
-                    "device": "app",
-                    "distinct_id": "peqet-s655n-k2c4l-oxheh-hwuvh-xxqdk-uuiia-b5y6m-qewit-w5ptb-bqe",
-                    "event": "video_viewed",
-                    "feature_name": "auth",
-                    "game_type": "smiley",
-                    "is_creator": false,
-                    "is_game_enabled": true,
-                    "is_logged_in": false,
-                    "is_nsfw": false,
-                    "like_count": 0,
-                    "publisher_user_id": "hz7ua-h4jap-ekowp-kjkrl-csgak-w2mzh-pkdso-kkalk-cgdsp-qnw6v-kae",
-                    "share_count": 0,
-                    "token_type": "yral",
-                    "type": "com.yral.shared.analytics.events.VideoViewedEventData",
-                    "user_id": "peqet-s655n-k2c4l-oxheh-hwuvh-xxqdk-uuiia-b5y6m-qewit-w5ptb-bqe",
-                    "video_id": "e672815db792350707679035ad2e3950",
-                    "view_count": 0,
-                    "wallet_balance": 25
-                    },
-                    "timestamp": "2025-11-04T13:12:51.299+00:00"
-                }
-                ]
-            },
-            "timestamp": "2025-11-04T13:12:53.846270398+00:00"
-            }
+  "ip_addr": "2409:40e3:20cc:bdbc:8000::",
+  "city": "patna",
+  "rows": [
+    {
+      "event_data": {
+        "canister_id": "ivkka-7qaaa-aaaas-qbg3q-cai",
+        "custom_device_id": "c724g-fanbu-s4a5s-t3frr-xdgtf-ntg4w-7qne3-mdh2u-id7b7-4xy63-oae",
+        "device": "app",
+        "distinct_id": "c724g-fanbu-s4a5s-t3frr-xdgtf-ntg4w-7qne3-mdh2u-id7b7-4xy63-oae",
+        "event": "video_impression",
+        "feature_name": "feed",
+        "game_type": "smiley",
+        "is_creator": false,
+        "is_game_enabled": true,
+        "is_logged_in": false,
+        "is_nsfw": false,
+        "like_count": 0,
+        "publisher_user_id": "nzlex-doomk-jojhy-vaahf-tpr5e-22lig-e2uvd-hho5a-goapc-ozxv2-eqe",
+        "share_count": 0,
+        "token_type": "yral",
+        "type": "com.yral.shared.analytics.events.VideoImpressionEventData",
+        "user_id": "c724g-fanbu-s4a5s-t3frr-xdgtf-ntg4w-7qne3-mdh2u-id7b7-4xy63-oae",
+        "video_id": "000b249d0cf9bff6fa10907edca6fa74",
+        "view_count": 9928,
+        "wallet_balance": 25.0
+      },
+      "timestamp": "2025-11-04T13:56:59.164+00:00"
+    },
+    {
+      "event_data": {
+        "canister_id": "ivkka-7qaaa-aaaas-qbg3q-cai",
+        "custom_device_id": "c724g-fanbu-s4a5s-t3frr-xdgtf-ntg4w-7qne3-mdh2u-id7b7-4xy63-oae",
+        "device": "app",
+        "distinct_id": "c724g-fanbu-s4a5s-t3frr-xdgtf-ntg4w-7qne3-mdh2u-id7b7-4xy63-oae",
+        "event": "video_started",
+        "feature_name": "auth",
+        "game_type": "smiley",
+        "is_creator": false,
+        "is_game_enabled": true,
+        "is_logged_in": false,
+        "is_nsfw": false,
+        "like_count": 0,
+        "publisher_user_id": "nzlex-doomk-jojhy-vaahf-tpr5e-22lig-e2uvd-hho5a-goapc-ozxv2-eqe",
+        "share_count": 0,
+        "token_type": "yral",
+        "type": "com.yral.shared.analytics.events.VideoStartedEventData",
+        "user_id": "c724g-fanbu-s4a5s-t3frr-xdgtf-ntg4w-7qne3-mdh2u-id7b7-4xy63-oae",
+        "video_id": "000b249d0cf9bff6fa10907edca6fa74",
+        "view_count": 9928,
+        "wallet_balance": 25.0
+      },
+      "timestamp": "2025-11-04T13:56:59.166+00:00"
+    },
+    {
+      "event_data": {
+        "canister_id": "ivkka-7qaaa-aaaas-qbg3q-cai",
+        "custom_device_id": "c724g-fanbu-s4a5s-t3frr-xdgtf-ntg4w-7qne3-mdh2u-id7b7-4xy63-oae",
+        "device": "app",
+        "distinct_id": "c724g-fanbu-s4a5s-t3frr-xdgtf-ntg4w-7qne3-mdh2u-id7b7-4xy63-oae",
+        "event": "game_tutorial_shown",
+        "feature_name": "feed",
+        "game_type": "smiley",
+        "is_creator": false,
+        "is_logged_in": false,
+        "is_nsfw": false,
+        "like_count": 0,
+        "publisher_user_id": "nzlex-doomk-jojhy-vaahf-tpr5e-22lig-e2uvd-hho5a-goapc-ozxv2-eqe",
+        "share_count": 0,
+        "token_type": "yral",
+        "type": "com.yral.shared.analytics.events.GameTutorialShownEventData",
+        "user_id": "c724g-fanbu-s4a5s-t3frr-xdgtf-ntg4w-7qne3-mdh2u-id7b7-4xy63-oae",
+        "video_id": "000b249d0cf9bff6fa10907edca6fa74",
+        "view_count": 9928,
+        "wallet_balance": 25.0
+      },
+      "timestamp": "2025-11-04T13:56:59.169+00:00"
+    },
+    {
+      "event_data": {
+        "canister_id": "ivkka-7qaaa-aaaas-qbg3q-cai",
+        "custom_device_id": "c724g-fanbu-s4a5s-t3frr-xdgtf-ntg4w-7qne3-mdh2u-id7b7-4xy63-oae",
+        "device": "app",
+        "distinct_id": "c724g-fanbu-s4a5s-t3frr-xdgtf-ntg4w-7qne3-mdh2u-id7b7-4xy63-oae",
+        "event": "video_impression",
+        "feature_name": "feed",
+        "game_type": "smiley",
+        "is_creator": false,
+        "is_game_enabled": true,
+        "is_logged_in": false,
+        "is_nsfw": false,
+        "like_count": 0,
+        "publisher_user_id": "ssnde-fhbim-lop65-dyxym-zi2io-l63xv-5b4k6-jqhip-spivo-myzjo-tqe",
+        "share_count": 0,
+        "token_type": "yral",
+        "type": "com.yral.shared.analytics.events.VideoImpressionEventData",
+        "user_id": "c724g-fanbu-s4a5s-t3frr-xdgtf-ntg4w-7qne3-mdh2u-id7b7-4xy63-oae",
+        "video_id": "0002eba08e48e90bcf8c3b2b62dc038f",
+        "view_count": 1426,
+        "wallet_balance": 25.0
+      },
+      "timestamp": "2025-11-04T13:56:59.170+00:00"
+    },
+    {
+      "event_data": {
+        "canister_id": "ivkka-7qaaa-aaaas-qbg3q-cai",
+        "custom_device_id": "c724g-fanbu-s4a5s-t3frr-xdgtf-ntg4w-7qne3-mdh2u-id7b7-4xy63-oae",
+        "device": "app",
+        "distinct_id": "c724g-fanbu-s4a5s-t3frr-xdgtf-ntg4w-7qne3-mdh2u-id7b7-4xy63-oae",
+        "event": "video_impression",
+        "feature_name": "feed",
+        "game_type": "smiley",
+        "is_creator": false,
+        "is_game_enabled": true,
+        "is_logged_in": false,
+        "is_nsfw": false,
+        "like_count": 0,
+        "publisher_user_id": "yly54-lozee-55gak-t5l3h-jgpyd-bf55c-swe7r-p2w3w-w4aqx-jfzjn-gae",
+        "share_count": 0,
+        "token_type": "yral",
+        "type": "com.yral.shared.analytics.events.VideoImpressionEventData",
+        "user_id": "c724g-fanbu-s4a5s-t3frr-xdgtf-ntg4w-7qne3-mdh2u-id7b7-4xy63-oae",
+        "video_id": "0008fc716b00ab7e33f80aa163ca50bc",
+        "view_count": 12147,
+        "wallet_balance": 25.0
+      },
+      "timestamp": "2025-11-04T13:56:59.173+00:00"
+    }
+  ]
+}
+
         "#;
 
         let payload: EventPayload = serde_json::from_str(json_str).unwrap();
 
         if let EventPayload::Bulk(bulk) = payload {
             // Verify common fields
-            assert!(bulk.event_data.common_fields.contains_key("city"));
-            assert!(bulk.event_data.common_fields.contains_key("country"));
-            assert!(bulk.event_data.common_fields.contains_key("ip_addr"));
+            assert!(bulk.common_fields.contains_key("city"));
+            assert!(bulk.common_fields.contains_key("country"));
+            assert!(bulk.common_fields.contains_key("ip_addr"));
 
             // Verify row fields
-            let row = &bulk.event_data.rows[0];
+            let row = &bulk.rows[0];
             assert!(row.event_data.fields.contains_key("event"));
             assert!(row.event_data.fields.contains_key("canister_id"));
 
             // Simulate merging
-            let mut merged = bulk.event_data.common_fields.clone();
+            let mut merged = bulk.common_fields.clone();
             merged.extend(row.event_data.fields.clone());
 
             assert_eq!(merged.get("city").and_then(|v| v.as_str()), Some("Mumbai"));
