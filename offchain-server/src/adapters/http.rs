@@ -9,7 +9,7 @@ use candid::Principal;
 use chrono::{DateTime, Utc};
 use google_cloud_bigquery::http::tabledata::insert_all::{InsertAllRequest, Row};
 use http::HeaderMap;
-use serde::Serialize;
+use serde::{Deserialize, Serialize};
 use serde_json::{json, Value};
 use std::{collections::HashMap, net::SocketAddr, sync::Arc};
 use tokio::net;
@@ -166,6 +166,47 @@ struct BigQueryEvent {
     params: String,
     timestamp: String,
 }
+
+/// Structure for individual event data within a bulk event
+#[derive(Debug, Clone, Deserialize, Serialize)]
+struct EventData {
+    #[serde(flatten)]
+    fields: HashMap<String, Value>,
+}
+
+/// Structure for a row in bulk events from mobile clients
+#[derive(Debug, Clone, Deserialize, Serialize)]
+struct EventRow {
+    event_data: EventData,
+}
+
+/// Structure for bulk events payload from mobile clients
+/// Format: { "event_data": { "city": "", "country": "", "ip_addr": "", "rows": [...] } }
+#[derive(Debug, Clone, Deserialize, Serialize)]
+struct BulkEventData {
+    #[serde(flatten)]
+    common_fields: HashMap<String, Value>,
+    rows: Vec<EventRow>,
+}
+
+/// Top-level structure for bulk events
+#[derive(Debug, Clone, Deserialize, Serialize)]
+struct BulkEventPayload {
+    event_data: BulkEventData,
+}
+
+/// Enum to represent different event payload types
+#[derive(Debug, Clone, Deserialize, Serialize)]
+#[serde(untagged)]
+enum EventPayload {
+    /// Bulk event with nested structure from mobile clients
+    Bulk(BulkEventPayload),
+    /// Array of individual events
+    Array(Vec<Value>),
+    /// Single event object
+    Single(Value),
+}
+
 async fn send_event_to_mixpanel(
     _: AuthenticatedRequest,
     State(state): State<AppState>,
@@ -213,73 +254,67 @@ async fn send_event_to_bigquery(
     State(state): State<AppState>,
     headers: HeaderMap,
     ConnectInfo(addr): ConnectInfo<SocketAddr>,
-    Json(payload): Json<Value>,
+    Json(payload): Json<EventPayload>,
 ) -> Result<(), AppError> {
-    let mut payload = payload;
-    if payload.get("ip_addr").is_none() {
-        let client_ip = headers
-            .get("x-forwarded-for")
-            .and_then(|h| h.to_str().ok())
-            .and_then(|s| s.split(',').next()) // take first if multiple
-            .map(|s| s.trim().to_string())
-            .unwrap_or_else(|| addr.ip().to_string()); // fallback to socket addr
-        payload["ip_addr"] = client_ip.into();
-    }
+    // Extract IP address from headers if not present
+    let client_ip = headers
+        .get("x-forwarded-for")
+        .and_then(|h| h.to_str().ok())
+        .and_then(|s| s.split(',').next())
+        .map(|s| s.trim().to_string())
+        .unwrap_or_else(|| addr.ip().to_string());
 
-    // Handle nested bulk event structure from mobile team
-    // Format: { "event_data": { "city": "", "country": "", "ip_addr": "", "rows": [...] } }
-    if let Some(event_data) = payload.get("event_data") {
-        if let Some(rows) = event_data.get("rows").and_then(|r| r.as_array()) {
-            // Extract common fields from outer event_data (excluding "rows")
-            let common_fields = if let Some(obj) = event_data.as_object() {
-                obj.iter()
-                    .filter(|(key, _)| *key != "rows")
-                    .map(|(k, v)| (k.clone(), v.clone()))
-                    .collect::<serde_json::Map<String, Value>>()
-            } else {
-                serde_json::Map::new()
-            };
+    match payload {
+        EventPayload::Bulk(bulk_payload) => {
+            // Handle nested bulk event structure from mobile team
+            let common_fields = bulk_payload.event_data.common_fields;
             
             // Process each event in rows, merging with common fields
-            let futures = rows.iter().map(|row| {
-                // Determine the base event object
-                let base_event = row.get("event_data").unwrap_or(row);
-                
+            let futures = bulk_payload.event_data.rows.iter().map(|row| {
                 // Merge common fields with event fields (event fields take precedence)
-                let merged_event = if let Some(event_obj) = base_event.as_object() {
-                    let mut merged = common_fields.clone();
-                    merged.extend(event_obj.iter().map(|(k, v)| (k.clone(), v.clone())));
-                    Value::Object(merged)
-                } else {
-                    Value::Object(common_fields.clone())
-                };
+                let mut merged = common_fields.clone();
                 
-                send_to_bigquery(&state, merged_event)
+                // Add IP address if not present in common fields
+                merged.entry("ip_addr".to_string())
+                    .or_insert_with(|| Value::String(client_ip.clone()));
+                
+                // Extend with event-specific fields
+                merged.extend(row.event_data.fields.clone());
+                
+                send_to_bigquery(&state, Value::Object(merged.into_iter().collect()))
             });
             
             let results: Vec<_> = futures::future::join_all(futures).await;
             for res in results {
                 res?;
             }
-            return Ok(());
+            Ok(())
         }
-    }
-
-    match payload.clone() {
-        Value::Array(events) => {
-            let futures = events
-                .into_iter()
-                .map(|event| send_to_bigquery(&state, event));
+        EventPayload::Array(events) => {
+            // Handle array of events
+            let futures = events.into_iter().map(|mut event| {
+                // Add IP address if not present
+                if let Some(obj) = event.as_object_mut() {
+                    obj.entry("ip_addr".to_string())
+                        .or_insert_with(|| Value::String(client_ip.clone()));
+                }
+                send_to_bigquery(&state, event)
+            });
+            
             let results: Vec<_> = futures::future::join_all(futures).await;
             for res in results {
                 res?;
             }
             Ok(())
         }
-        Value::Object(_) => send_to_bigquery(&state, payload).await,
-        _ => Err(AppError::InvalidData(
-            "Event payload must be an array or object".into(),
-        )),
+        EventPayload::Single(mut event) => {
+            // Handle single event
+            if let Some(obj) = event.as_object_mut() {
+                obj.entry("ip_addr".to_string())
+                    .or_insert_with(|| Value::String(client_ip.clone()));
+            }
+            send_to_bigquery(&state, event).await
+        }
     }
 }
 async fn send_to_bigquery(state: &AppState, mut payload: Value) -> Result<(), AppError> {
@@ -404,4 +439,178 @@ async fn get_ip_range_v2(
 
 async fn health_route() -> (StatusCode, &'static str) {
     (StatusCode::OK, "OK")
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn test_deserialize_bulk_event_payload() {
+        // Test bulk event structure from mobile team
+        let json_str = r#"{
+            "event_data": {
+                "city": "Mumbai",
+                "country": "India",
+                "ip_addr": "2402:3a80:16ec:dd61:0:52:b67b:4d01",
+                "rows": [
+                    {
+                        "event_data": {
+                            "canister_id": "ivkka-7qaaa-aaaas-qbg3q-cai",
+                            "event": "video_viewed",
+                            "device": "app",
+                            "duration": 120
+                        }
+                    },
+                    {
+                        "event_data": {
+                            "canister_id": "xxxx-7qaaa-aaaas-qbg3q-cai",
+                            "event": "video_liked",
+                            "device": "app"
+                        }
+                    }
+                ]
+            }
+        }"#;
+
+        let payload: Result<EventPayload, _> = serde_json::from_str(json_str);
+        assert!(payload.is_ok(), "Failed to deserialize bulk event payload");
+
+        if let Ok(EventPayload::Bulk(bulk)) = payload {
+            assert_eq!(bulk.event_data.rows.len(), 2);
+            assert_eq!(
+                bulk.event_data.common_fields.get("country").and_then(|v| v.as_str()),
+                Some("India")
+            );
+            assert_eq!(
+                bulk.event_data.common_fields.get("city").and_then(|v| v.as_str()),
+                Some("Mumbai")
+            );
+        } else {
+            panic!("Expected bulk event payload");
+        }
+    }
+
+    #[test]
+    fn test_deserialize_array_event_payload() {
+        // Test array of events
+        let json_str = r#"[
+            {
+                "event": "page_view",
+                "user_id": "123"
+            },
+            {
+                "event": "click",
+                "user_id": "456"
+            }
+        ]"#;
+
+        let payload: Result<EventPayload, _> = serde_json::from_str(json_str);
+        assert!(payload.is_ok(), "Failed to deserialize array event payload");
+
+        if let Ok(EventPayload::Array(events)) = payload {
+            assert_eq!(events.len(), 2);
+        } else {
+            panic!("Expected array event payload");
+        }
+    }
+
+    #[test]
+    fn test_deserialize_single_event_payload() {
+        // Test single event object
+        let json_str = r#"{
+            "event": "page_view",
+            "user_id": "123",
+            "timestamp": "2024-01-01T00:00:00Z"
+        }"#;
+
+        let payload: Result<EventPayload, _> = serde_json::from_str(json_str);
+        assert!(payload.is_ok(), "Failed to deserialize single event payload");
+
+        if let Ok(EventPayload::Single(event)) = payload {
+            assert_eq!(
+                event.get("event").and_then(|v| v.as_str()),
+                Some("page_view")
+            );
+        } else {
+            panic!("Expected single event payload");
+        }
+    }
+
+    #[test]
+    fn test_bulk_event_with_empty_common_fields() {
+        // Test bulk event with minimal common fields
+        let json_str = r#"{
+            "event_data": {
+                "rows": [
+                    {
+                        "event_data": {
+                            "event": "test_event"
+                        }
+                    }
+                ]
+            }
+        }"#;
+
+        let payload: Result<EventPayload, _> = serde_json::from_str(json_str);
+        assert!(payload.is_ok(), "Failed to deserialize bulk event with empty common fields");
+
+        if let Ok(EventPayload::Bulk(bulk)) = payload {
+            assert_eq!(bulk.event_data.rows.len(), 1);
+        } else {
+            panic!("Expected bulk event payload");
+        }
+    }
+
+    #[test]
+    fn test_invalid_json_fails() {
+        // Test that invalid JSON fails to deserialize
+        let json_str = r#"{ invalid json }"#;
+
+        let payload: Result<EventPayload, _> = serde_json::from_str(json_str);
+        assert!(payload.is_err(), "Should fail to deserialize invalid JSON");
+    }
+
+    #[test]
+    fn test_bulk_event_fields_merging() {
+        // Test that we can properly extract fields for merging
+        let json_str = r#"{
+            "event_data": {
+                "city": "Mumbai",
+                "country": "India",
+                "ip_addr": "127.0.0.1",
+                "rows": [
+                    {
+                        "event_data": {
+                            "event": "video_viewed",
+                            "canister_id": "test-id"
+                        }
+                    }
+                ]
+            }
+        }"#;
+
+        let payload: EventPayload = serde_json::from_str(json_str).unwrap();
+
+        if let EventPayload::Bulk(bulk) = payload {
+            // Verify common fields
+            assert!(bulk.event_data.common_fields.contains_key("city"));
+            assert!(bulk.event_data.common_fields.contains_key("country"));
+            assert!(bulk.event_data.common_fields.contains_key("ip_addr"));
+            
+            // Verify row fields
+            let row = &bulk.event_data.rows[0];
+            assert!(row.event_data.fields.contains_key("event"));
+            assert!(row.event_data.fields.contains_key("canister_id"));
+            
+            // Simulate merging
+            let mut merged = bulk.event_data.common_fields.clone();
+            merged.extend(row.event_data.fields.clone());
+            
+            assert_eq!(merged.get("city").and_then(|v| v.as_str()), Some("Mumbai"));
+            assert_eq!(merged.get("event").and_then(|v| v.as_str()), Some("video_viewed"));
+        } else {
+            panic!("Expected bulk event payload");
+        }
+    }
 }
