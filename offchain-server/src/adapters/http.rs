@@ -248,9 +248,7 @@ async fn send_event_to_bigquery(
                 // Merge common fields with event fields (event fields take precedence)
                 let merged_event = if let Some(event_obj) = base_event.as_object() {
                     let mut merged = common_fields.clone();
-                    for (key, value) in event_obj {
-                        merged.insert(key.clone(), value.clone());
-                    }
+                    merged.extend(event_obj.iter().map(|(k, v)| (k.clone(), v.clone())));
                     Value::Object(merged)
                 } else {
                     Value::Object(common_fields.clone())
