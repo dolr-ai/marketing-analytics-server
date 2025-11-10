@@ -230,7 +230,11 @@ async fn send_event_to_mixpanel(
         payload["device"] = classify_device(&ua_lc).into();
     }
     if let Ok(bal) = crate::utils::btc_balance_of(principal).await {
+        // Keep raw e8s value for backwards compatibility
         payload["btc_balance_e8s"] = (bal as f64).into();
+        // Add converted BTC value (1 BTC = 100,000,000 e8s)
+        let btc_balance = (bal as f64) / 100_000_000.0;
+        payload["btc_balance"] = btc_balance.into();
     }
     if let Ok(bal) = crate::utils::sats_balance_of(principal).await {
         payload["sats_balance"] = (bal).into();
