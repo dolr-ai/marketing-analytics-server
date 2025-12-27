@@ -1,0 +1,38 @@
+{
+    # Global options
+    email joel@gobazzinga.io
+}
+
+# Main analytics server
+analytics.yral.com {
+    # Reverse proxy to the server container
+    reverse_proxy server:3000 {
+        # Headers for proper proxying
+        header_up Host {host}
+        header_up X-Real-IP {remote_host}
+        header_up X-Forwarded-For {remote_host}
+        header_up X-Forwarded-Proto {scheme}
+    }
+
+    # Security headers
+    header {
+        Strict-Transport-Security "max-age=31536000; includeSubDomains; preload"
+        X-Frame-Options "DENY"
+        X-Content-Type-Options "nosniff"
+        X-XSS-Protection "1; mode=block"
+        Referrer-Policy "strict-origin-when-cross-origin"
+    }
+
+    # Logging
+    log {
+        output stdout
+        format json
+        level INFO
+    }
+}
+
+# Health check endpoint on HTTP (for load balancer health checks)
+:80 {
+    respond /health "OK" 200
+    respond "Service available at https://analytics.yral.com" 200
+}

@@ -79,3 +79,6 @@ RUN gzip -df /app/ip_db.mmdb.gz
 USER appuser
 # Expose the port that the application listens on.
 EXPOSE 3000
+
+# Run the application
+CMD ["/marketing-analytics-server"]
