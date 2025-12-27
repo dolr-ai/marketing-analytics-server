@@ -7,11 +7,7 @@
 analytics.yral.com {
     # Reverse proxy to the server container
     reverse_proxy server:3000 {
-        # Headers for proper proxying
-        header_up Host {host}
         header_up X-Real-IP {remote_host}
-        header_up X-Forwarded-For {remote_host}
-        header_up X-Forwarded-Proto {scheme}
     }
 
     # Security headers
